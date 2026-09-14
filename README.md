@@ -59,11 +59,13 @@ build/S2T.app/Contents/MacOS/S2T --verify-input-outline
 
 Verification uses isolated fixtures where applicable. These checks do not establish physical shortcut behavior, live provider compatibility, or pixel-level appearance across apps.
 
-To package a universal DMG and ZIP:
+To build the app and package a universal DMG and ZIP using the saved keyboard installer design:
 
 ```sh
 bash scripts/package-beta.sh
 ```
+
+The installer keeps the approved keyboard background, 72-point app icon, and Applications shortcut. Its editable sources and layout are documented in [the installer design](docs/installer-design.md). `scripts/build-app.sh` builds only the app; it does not create a DMG.
 
 Packages are written under `build/releases`. Local beta signing is not Developer ID signing or notarization. See [the beta guide](docs/BETA-READ-ME.txt).
 

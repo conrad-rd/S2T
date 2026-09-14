@@ -14,7 +14,7 @@ ln -s /Applications "$S2T_STAGE/Applications"
 swift scripts/dmg-artwork.swift "$S2T_STAGE/.background/install.tiff"
 if [[ ! -x build/dmg-tools/bin/python ]]; then python3 -m venv build/dmg-tools; fi
 build/dmg-tools/bin/python -c 'import ds_store, mac_alias' 2>/dev/null || build/dmg-tools/bin/pip install 'ds-store==1.3.1'
-hdiutil create -quiet -srcfolder "$S2T_STAGE" -volname S2T -fs HFS+ -format UDRW "$S2T_WORK/writable.dmg"
+hdiutil create -quiet -srcfolder "$S2T_STAGE" -volname "Install S2T" -fs HFS+ -format UDRW "$S2T_WORK/writable.dmg"
 hdiutil attach -quiet -nobrowse -noautoopen -mountpoint "$S2T_MOUNT" "$S2T_WORK/writable.dmg"
 trap 'hdiutil detach -quiet "$S2T_MOUNT" 2>/dev/null || true' EXIT
 build/dmg-tools/bin/python scripts/dmg-layout.py "$S2T_MOUNT"
@@ -23,5 +23,15 @@ hdiutil detach -quiet "$S2T_MOUNT"
 trap - EXIT
 hdiutil convert -quiet "$S2T_WORK/writable.dmg" -format UDZO -imagekey zlib-level=9 -o "$S2T_DMG"
 hdiutil verify "$S2T_DMG"
+S2T_MOUNT="$S2T_WORK/remounted"
+mkdir -p "$S2T_MOUNT"
+hdiutil attach -quiet -readonly -nobrowse -noautoopen -mountpoint "$S2T_MOUNT" "$S2T_DMG"
+trap 'hdiutil detach -quiet "$S2T_MOUNT" 2>/dev/null || true' EXIT
+build/dmg-tools/bin/python scripts/dmg-layout.py "$S2T_MOUNT" --verify
+ditto "$S2T_MOUNT/S2T.app" "$S2T_WORK/installation-check/S2T.app"
+codesign --verify --deep --strict "$S2T_WORK/installation-check/S2T.app"
+"$S2T_WORK/installation-check/S2T.app/Contents/MacOS/S2T" --verify-build
+hdiutil detach -quiet "$S2T_MOUNT"
+trap - EXIT
 shasum -a 256 "$S2T_DMG" > "$S2T_DMG.sha256"
 echo "Built $S2T_DMG"

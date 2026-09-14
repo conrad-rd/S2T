@@ -1,4 +1,5 @@
 import AppKit
+import Accelerate
 import Metal
 import S2TCore
 
@@ -117,19 +118,29 @@ enum ChromaExpansion {
               !bitmap.bitmapFormat.contains(.alphaFirst), let bytes = bitmap.bitmapData,
               let texture = makeTexture(width: bitmap.pixelsWide, height: bitmap.pixelsHigh, format: .rgba16Float) else { return nil }
         let straightAlpha = bitmap.bitmapFormat.contains(.alphaNonpremultiplied)
-        var pixels = [SIMD4<Float16>](repeating: .zero, count: texture.width * texture.height)
+        var pixels = [Float](repeating: 0, count: texture.width * texture.height * 4)
         for y in 0..<texture.height { for x in 0..<texture.width {
             let i = y * bitmap.bytesPerRow + x * 4
             let alpha = Float(bytes[i + 3]) / 255
             let gain = straightAlpha ? alpha : 1
-            pixels[y * texture.width + x] = SIMD4(Float16(Float(bytes[i]) / 255 * gain),
-                Float16(Float(bytes[i + 1]) / 255 * gain), Float16(Float(bytes[i + 2]) / 255 * gain), Float16(alpha))
+            let destination = (y * texture.width + x) * 4
+            pixels[destination] = Float(bytes[i]) / 255 * gain
+            pixels[destination + 1] = Float(bytes[i + 1]) / 255 * gain
+            pixels[destination + 2] = Float(bytes[i + 2]) / 255 * gain
+            pixels[destination + 3] = alpha
         } }
         // Filter premultiplied color; half precision keeps faint tails from losing their hue.
-        pixels.withUnsafeBytes {
+        let converted = pixels.withUnsafeMutableBytes { bytes -> Bool in
+            var source = vImage_Buffer(data: bytes.baseAddress!, height: vImagePixelCount(texture.height),
+                width: vImagePixelCount(texture.width * 4), rowBytes: texture.width * 4 * MemoryLayout<Float>.stride)
+            var destination = vImage_Buffer(data: bytes.baseAddress!, height: source.height,
+                width: source.width, rowBytes: texture.width * 4 * MemoryLayout<UInt16>.stride)
+            guard vImageConvert_PlanarFtoPlanar16F(&source, &destination, vImage_Flags(kvImageNoFlags)) == kvImageNoError else { return false }
             texture.replace(region: MTLRegionMake2D(0, 0, texture.width, texture.height), mipmapLevel: 0,
-                withBytes: $0.baseAddress!, bytesPerRow: texture.width * MemoryLayout<SIMD4<Float16>>.stride)
+                withBytes: bytes.baseAddress!, bytesPerRow: destination.rowBytes)
+            return true
         }
+        guard converted else { return nil }
         sources.setObject(Texture(texture, source: image), forKey: key, cost: texture.width * texture.height * 8)
         return texture
     }

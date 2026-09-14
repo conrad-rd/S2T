@@ -1,0 +1,21 @@
+{
+  "name": "s2t-credits-local",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test integration.test.mjs tests/*.test.mjs",
+    "test:browser": "node browser-check.mjs",
+    "admin": "node admin.mjs"
+  },
+  "engines": {
+    "node": ">=22.13"
+  },
+  "devDependencies": {
+    "playwright": "^1.63.0"
+  },
+  "dependencies": {
+    "jose": "^6.2.12",
+    "stripe": "^22.6.2"
+  }
+}

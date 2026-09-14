@@ -1,0 +1,546 @@
+{
+  "name": "Search input with leading icon space, submit button and external suggestions",
+  "editor": 204,
+  "expected": [
+    [
+      660,
+      58
+    ],
+    [
+      576,
+      37
+    ]
+  ],
+  "nodes": [
+    {
+      "editable": false,
+      "subrole": "",
+      "parent": 103,
+      "role": "AXGroup",
+      "id": 110,
+      "children": [
+        118,
+        119
+      ],
+      "childrenComplete": true,
+      "frame": [
+        [
+          624,
+          58
+        ],
+        [
+          659,
+          37
+        ]
+      ]
+    },
+    {
+      "editable": false,
+      "subrole": "AXLandmarkSearch",
+      "parent": 110,
+      "role": "AXGroup",
+      "id": 118,
+      "children": [
+        131,
+        132
+      ],
+      "childrenComplete": true,
+      "frame": [
+        [
+          660,
+          58
+        ],
+        [
+          576,
+          37
+        ]
+      ]
+    },
+    {
+      "parent": 118,
+      "role": "AXGroup",
+      "frame": [
+        [
+          663,
+          58
+        ],
+        [
+          570,
+          37
+        ]
+      ],
+      "children": [
+        153,
+        154
+      ],
+      "id": 131,
+      "subrole": "",
+      "childrenComplete": true,
+      "editable": false
+    },
+    {
+      "frame": [
+        [
+          663,
+          58
+        ],
+        [
+          512,
+          37
+        ]
+      ],
+      "children": [
+        188
+      ],
+      "id": 153,
+      "editable": false,
+      "parent": 131,
+      "role": "AXGroup",
+      "subrole": "",
+      "childrenComplete": true
+    },
+    {
+      "editable": false,
+      "parent": 153,
+      "subrole": "",
+      "frame": [
+        [
+          707,
+          68
+        ],
+        [
+          464,
+          17
+        ]
+      ],
+      "id": 188,
+      "childrenComplete": true,
+      "children": [
+        203,
+        204
+      ],
+      "role": "AXGroup"
+    },
+    {
+      "childrenComplete": true,
+      "id": 203,
+      "editable": false,
+      "subrole": "AXEmptyGroup",
+      "children": [],
+      "role": "AXGroup",
+      "frame": [
+        [
+          664,
+          68
+        ],
+        [
+          44,
+          18
+        ]
+      ],
+      "parent": 188
+    },
+    {
+      "childrenComplete": true,
+      "id": 204,
+      "editable": true,
+      "subrole": "",
+      "children": [],
+      "role": "AXComboBox",
+      "frame": [
+        [
+          707,
+          68
+        ],
+        [
+          464,
+          17
+        ]
+      ],
+      "parent": 188
+    },
+    {
+      "frame": [
+        [
+          1175,
+          58
+        ],
+        [
+          58,
+          37
+        ]
+      ],
+      "children": [],
+      "id": 154,
+      "editable": false,
+      "parent": 131,
+      "role": "AXButton",
+      "subrole": "",
+      "childrenComplete": true
+    },
+    {
+      "parent": 118,
+      "role": "AXList",
+      "frame": [
+        [
+          663,
+          98
+        ],
+        [
+          512,
+          265
+        ]
+      ],
+      "children": [
+        155,
+        156,
+        157,
+        158,
+        159,
+        160,
+        161,
+        162,
+        163,
+        164
+      ],
+      "id": 132,
+      "subrole": "",
+      "childrenComplete": true,
+      "editable": false
+    },
+    {
+      "frame": [
+        [
+          685,
+          116
+        ],
+        [
+          132,
+          18
+        ]
+      ],
+      "children": [],
+      "id": 155,
+      "editable": false,
+      "parent": 132,
+      "role": "AXStaticText",
+      "subrole": "",
+      "childrenComplete": true
+    },
+    {
+      "frame": [
+        [
+          1096,
+          111
+        ],
+        [
+          47,
+          28
+        ]
+      ],
+      "children": [
+        189
+      ],
+      "id": 156,
+      "editable": false,
+      "parent": 132,
+      "role": "AXGroup",
+      "subrole": "",
+      "childrenComplete": true
+    },
+    {
+      "editable": false,
+      "parent": 156,
+      "subrole": "",
+      "frame": [
+        [
+          1095,
+          111
+        ],
+        [
+          48,
+          28
+        ]
+      ],
+      "id": 189,
+      "childrenComplete": true,
+      "children": [],
+      "role": "AXImage"
+    },
+    {
+      "frame": [
+        [
+          685,
+          155
+        ],
+        [
+          103,
+          19
+        ]
+      ],
+      "children": [],
+      "id": 157,
+      "editable": false,
+      "parent": 132,
+      "role": "AXStaticText",
+      "subrole": "",
+      "childrenComplete": true
+    },
+    {
+      "frame": [
+        [
+          1096,
+          151
+        ],
+        [
+          47,
+          27
+        ]
+      ],
+      "children": [
+        190
+      ],
+      "id": 158,
+      "editable": false,
+      "parent": 132,
+      "role": "AXGroup",
+      "subrole": "",
+      "childrenComplete": true
+    },
+    {
+      "childrenComplete": true,
+      "id": 190,
+      "editable": false,
+      "subrole": "",
+      "children": [],
+      "role": "AXImage",
+      "frame": [
+        [
+          1095,
+          151
+        ],
+        [
+          48,
+          27
+        ]
+      ],
+      "parent": 158
+    },
+    {
+      "frame": [
+        [
+          685,
+          195
+        ],
+        [
+          126,
+          18
+        ]
+      ],
+      "children": [],
+      "id": 159,
+      "editable": false,
+      "parent": 132,
+      "role": "AXStaticText",
+      "subrole": "",
+      "childrenComplete": true
+    },
+    {
+      "frame": [
+        [
+          1096,
+          190
+        ],
+        [
+          47,
+          28
+        ]
+      ],
+      "children": [
+        191
+      ],
+      "id": 160,
+      "editable": false,
+      "parent": 132,
+      "role": "AXGroup",
+      "subrole": "",
+      "childrenComplete": true
+    },
+    {
+      "childrenComplete": true,
+      "id": 191,
+      "editable": false,
+      "subrole": "",
+      "children": [],
+      "role": "AXImage",
+      "frame": [
+        [
+          1095,
+          190
+        ],
+        [
+          48,
+          28
+        ]
+      ],
+      "parent": 160
+    },
+    {
+      "frame": [
+        [
+          685,
+          235
+        ],
+        [
+          149,
+          18
+        ]
+      ],
+      "children": [],
+      "id": 161,
+      "editable": false,
+      "parent": 132,
+      "role": "AXStaticText",
+      "subrole": "",
+      "childrenComplete": true
+    },
+    {
+      "frame": [
+        [
+          685,
+          274
+        ],
+        [
+          237,
+          19
+        ]
+      ],
+      "children": [],
+      "id": 162,
+      "editable": false,
+      "parent": 132,
+      "role": "AXStaticText",
+      "subrole": "",
+      "childrenComplete": true
+    },
+    {
+      "frame": [
+        [
+          685,
+          314
+        ],
+        [
+          104,
+          18
+        ]
+      ],
+      "children": [],
+      "id": 163,
+      "editable": false,
+      "parent": 132,
+      "role": "AXStaticText",
+      "subrole": "",
+      "childrenComplete": true
+    },
+    {
+      "frame": [
+        [
+          1023,
+          343
+        ],
+        [
+          152,
+          13
+        ]
+      ],
+      "children": [],
+      "id": 164,
+      "editable": false,
+      "parent": 132,
+      "role": "AXButton",
+      "subrole": "",
+      "childrenComplete": true
+    },
+    {
+      "editable": false,
+      "subrole": "",
+      "parent": 110,
+      "role": "AXGroup",
+      "id": 119,
+      "children": [
+        133
+      ],
+      "childrenComplete": true,
+      "frame": [
+        [
+          1247,
+          58
+        ],
+        [
+          36,
+          37
+        ]
+      ]
+    },
+    {
+      "parent": 119,
+      "role": "AXGroup",
+      "frame": [
+        [
+          1247,
+          58
+        ],
+        [
+          36,
+          37
+        ]
+      ],
+      "children": [
+        165,
+        166
+      ],
+      "id": 133,
+      "subrole": "",
+      "childrenComplete": true,
+      "editable": false
+    },
+    {
+      "frame": [
+        [
+          1247,
+          58
+        ],
+        [
+          36,
+          37
+        ]
+      ],
+      "children": [],
+      "id": 165,
+      "editable": false,
+      "parent": 133,
+      "role": "AXButton",
+      "subrole": "",
+      "childrenComplete": true
+    },
+    {
+      "frame": [
+        [
+          1247,
+          94
+        ],
+        [
+          36,
+          0
+        ]
+      ],
+      "children": [],
+      "id": 166,
+      "editable": false,
+      "parent": 133,
+      "role": "AXGroup",
+      "subrole": "AXUserInterfaceTooltip",
+      "childrenComplete": true
+    }
+  ]
+}

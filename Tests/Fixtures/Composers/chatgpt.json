@@ -1,0 +1,262 @@
+{
+  "name": "ChatGPT web",
+  "source": "Live Accessibility roles and geometry, 2026-09-13. No text values or screenshots.",
+  "editor": 604,
+  "expected": [
+    [
+      805,
+      516
+    ],
+    [
+      634,
+      57
+    ]
+  ],
+  "nodes": [
+    {
+      "parent": null,
+      "editable": false,
+      "children": [
+        485
+      ],
+      "childrenComplete": true,
+      "id": 426,
+      "subrole": "",
+      "frame": [
+        [
+          455,
+          516
+        ],
+        [
+          1333,
+          57
+        ]
+      ],
+      "role": "AXGroup"
+    },
+    {
+      "parent": 426,
+      "editable": false,
+      "children": [
+        537
+      ],
+      "childrenComplete": true,
+      "id": 485,
+      "subrole": "",
+      "frame": [
+        [
+          805,
+          516
+        ],
+        [
+          634,
+          57
+        ]
+      ],
+      "role": "AXGroup"
+    },
+    {
+      "parent": 485,
+      "editable": false,
+      "children": [
+        570
+      ],
+      "childrenComplete": true,
+      "id": 537,
+      "subrole": "",
+      "frame": [
+        [
+          805,
+          516
+        ],
+        [
+          634,
+          57
+        ]
+      ],
+      "role": "AXGroup"
+    },
+    {
+      "parent": 537,
+      "editable": false,
+      "children": [
+        602,
+        603,
+        604,
+        605,
+        606,
+        607
+      ],
+      "childrenComplete": true,
+      "id": 570,
+      "subrole": "",
+      "frame": [
+        [
+          805,
+          516
+        ],
+        [
+          634,
+          57
+        ]
+      ],
+      "role": "AXGroup"
+    },
+    {
+      "parent": 570,
+      "editable": false,
+      "children": [],
+      "childrenComplete": true,
+      "id": 602,
+      "subrole": "AXEmptyGroup",
+      "frame": [
+        [
+          805,
+          516
+        ],
+        [
+          634,
+          0
+        ]
+      ],
+      "role": "AXGroup"
+    },
+    {
+      "parent": 570,
+      "editable": false,
+      "children": [],
+      "childrenComplete": true,
+      "id": 603,
+      "subrole": "",
+      "frame": [
+        [
+          811,
+          529
+        ],
+        [
+          30,
+          30
+        ]
+      ],
+      "role": "AXPopUpButton"
+    },
+    {
+      "parent": 570,
+      "editable": false,
+      "children": [],
+      "childrenComplete": true,
+      "id": 604,
+      "subrole": "",
+      "frame": [
+        [
+          847,
+          533
+        ],
+        [
+          407,
+          35
+        ]
+      ],
+      "role": "AXTextArea"
+    },
+    {
+      "parent": 570,
+      "editable": false,
+      "children": [
+        611
+      ],
+      "childrenComplete": true,
+      "id": 605,
+      "subrole": "",
+      "frame": [
+        [
+          1262,
+          529
+        ],
+        [
+          101,
+          30
+        ]
+      ],
+      "role": "AXGroup"
+    },
+    {
+      "parent": 570,
+      "editable": false,
+      "children": [],
+      "childrenComplete": true,
+      "id": 606,
+      "subrole": "",
+      "frame": [
+        [
+          1366,
+          529
+        ],
+        [
+          30,
+          30
+        ]
+      ],
+      "role": "AXButton"
+    },
+    {
+      "parent": 570,
+      "editable": false,
+      "children": [
+        612
+      ],
+      "childrenComplete": true,
+      "id": 607,
+      "subrole": "",
+      "frame": [
+        [
+          1402,
+          529
+        ],
+        [
+          30,
+          30
+        ]
+      ],
+      "role": "AXGroup"
+    },
+    {
+      "parent": 605,
+      "editable": false,
+      "children": [],
+      "childrenComplete": true,
+      "id": 611,
+      "subrole": "",
+      "frame": [
+        [
+          1262,
+          529
+        ],
+        [
+          101,
+          30
+        ]
+      ],
+      "role": "AXPopUpButton"
+    },
+    {
+      "parent": 607,
+      "editable": false,
+      "children": [],
+      "childrenComplete": true,
+      "id": 612,
+      "subrole": "",
+      "frame": [
+        [
+          1402,
+          529
+        ],
+        [
+          30,
+          30
+        ]
+      ],
+      "role": "AXButton"
+    }
+  ]
+}

@@ -1,0 +1,97 @@
+S2T · Getting started
+
+macOS 14 or later · Apple silicon and Intel
+
+Install
+
+1. Drag S2T into Applications. If updating, quit the old S2T first.
+2. Open S2T from Applications, then eject the disk image.
+3. Look for the S2T icon in the menu bar at the top of your screen.
+   There is no Dock icon. Click the icon and choose Set up dictation.
+
+If macOS blocks the app
+
+This beta is locally signed. It does not yet have Developer ID signing or
+Apple notarization. Only open a copy from someone you trust.
+After trying to open it, go to System Settings > Privacy & Security and
+choose Open Anyway. Then open S2T again.
+Apple's instructions: https://support.apple.com/102445
+
+Set up dictation
+
+The setup menu keeps track of what still needs attention.
+
+1. Click Allow microphone and approve the macOS prompt.
+2. Return to the setup menu and click Enable Accessibility. Enable S2T in
+   System Settings > Privacy & Security > Accessibility. S2T checks again
+   automatically. This access enables the shortcut and text insertion.
+3. Under Provider keys, choose Speech to text. Paste your AssemblyAI key
+   and click Save. Wait for the key check. You can select another provider.
+4. For text cleanup, add an OpenRouter key under Text cleanup. Or select
+   Use Verbatim to start with only a speech-to-text key. Provider accounts
+   need available credits. Keys are not included with this installer.
+5. Click Test shortcut, then press and release Fn. This records no audio.
+   If emoji also appears, follow the Fix Fn steps below.
+
+Try your first dictation
+
+Close the menu. Click a text field, hold Fn and say a short sentence, then
+release. S2T inserts the result and copies the delivered text to your clipboard.
+You can also tap Fn to start and tap again to finish.
+
+Fix Fn
+
+Under Set up dictation > Fix Fn, choose Open Keyboard settings.
+Set "Press Fn key to" or "Press Globe key to" to "Do Nothing".
+If it already says Do Nothing but emoji still appears, choose a different
+option and then choose Do Nothing again. Return to S2T and test again.
+S2T automatically tries to apply this setting, but some macOS versions do not
+apply preference changes immediately. S2T restores the previous setting on
+quit. Fn combinations still work. You can choose another activation key in
+the setup menu and enable hold-to-talk and tap-to-toggle separately.
+Apple's settings guide: https://support.apple.com/guide/mac-help/keyboard-settings-kbdm162/mac
+
+If access is allowed but the shortcut still fails, quit S2T and reopen it
+from Applications. Check that Accessibility lists that copy of S2T. Avoid
+running another copy from Downloads or the disk image.
+
+Using S2T
+
+Standard menu actions close the menu when selected. Key and model editors
+let you paste and save within their submenu. Completed dictation waits for manual menu dismissal before insertion.
+Last dictation keeps the result and offers Copy if an app rejects insertion.
+
+Test microphone lets you check the input without uploading audio. Automatic
+selection prefers the Mac's built-in microphone. Choose another under
+Dictation > Microphone. Using an AirPods microphone can reduce
+Bluetooth playback quality while recording.
+
+If saved keys cannot be read, use Models & API keys > Unlock saved keys. Normal launch
+does not prompt for Keychain access.
+
+Your data
+
+The selected speech-to-text provider receives the recording. The text
+processing provider receives the transcript when cleanup is enabled.
+Usage is charged to your provider accounts. Credentials are stored in Keychain.
+S2T does not save recordings or transcripts to files.
+
+Prompt mode uses temporary screen recording while you dictate to collect visual
+references near the pointer. Selected images can be sent to your chosen vision
+provider and saved as PNG attachments. Use ordinary dictation when you do not
+want visual references included.
+
+Clipboard context can retain up to 50 text copies for 48 hours in an encrypted
+local file. Controls are under Dictation > Clipboard context.
+Disabling capture retains history. Clear removes it. Matching copied values
+are resolved locally after text processing.
+
+After successful delivery, dictionary learning can watch corrections in the
+receiving nonsecure field for up to one minute. It saves stable short word
+replacements locally. The editable dictionary is reachable under Models & API keys.
+
+Feedback
+
+Include your macOS version, Mac chip, S2T version and build from Dictation setup,
+and steps to reproduce the problem. Mention the receiving app and provider
+when relevant. Do not include API keys or private recordings or transcripts.

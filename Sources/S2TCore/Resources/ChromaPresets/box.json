@@ -1,0 +1,38 @@
+{
+  "app": "Chroma Glow",
+  "appVersion": "1.6",
+  "backgroundBlurRadiusPoints": 76.59375,
+  "display": "Built-in Retina Display",
+  "displayHeightPoints": 1169,
+  "displayWidthPoints": 1800,
+  "liveDesktopActive": true,
+  "schemaVersion": 1,
+  "settings": {
+    "blur": 2,
+    "centerX": 0.5,
+    "centerY": 0.68,
+    "effectBlur": 30.040762,
+    "falloffCurve": {
+      "x1": 0.780627,
+      "x2": 0.9347218,
+      "y1": 0.08188291,
+      "y2": 0.13844937
+    },
+    "glow": 2,
+    "quality": 5,
+    "scale": 0.83254075,
+    "spread": 1.3684783,
+    "style": 1,
+    "surfaceOpacity": 1,
+    "sweep": {
+      "blur": 0,
+      "brightness": 3,
+      "enabled": true,
+      "height": 1,
+      "saturation": 2,
+      "speed": 0,
+      "width": 0.5
+    }
+  },
+  "style": "Box"
+}

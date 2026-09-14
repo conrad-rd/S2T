@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDisplayName</key>
+	<string>S2T</string>
+	<key>CFBundleExecutable</key>
+	<string>S2T</string>
+	<key>CFBundleIconFile</key>
+	<string>S2T</string>
+	<key>CFBundleIconName</key>
+	<string>S2T</string>
+	<key>CFBundleIdentifier</key>
+	<string>com.s2t.dictation</string>
+	<key>CFBundleName</key>
+	<string>S2T</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.0.1</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>14.0</string>
+	<key>LSUIElement</key>
+	<true/>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>S2T connects to the local model endpoint you select for speech recognition or text cleanup.</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSHumanReadableCopyright</key>
+	<string>S2T</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Prompt mode uses on-device speech recognition during dictation to detect spoken visual references such as look here. S2T does not send this detection audio to Apple.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>S2T uses your microphone while you dictate. When you finish, your recording is sent to your selected speech-to-text provider using your own API key.</string>
+</dict>
+</plist>

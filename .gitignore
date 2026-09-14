@@ -1,0 +1,27 @@
+# Build output and local tooling
+.build/
+build/
+.DS_Store
+*.xcuserstate
+node_modules/
+__pycache__/
+*.pyc
+
+# Credentials and local data
+.env
+.env.*
+!.env.example
+!.env.sample
+*.pem
+*.p12
+*.key
+*.sqlite
+*.sqlite-*
+*.db
+*.db-*
+*.log
+
+# Separate website checkout and generated design references
+/website/
+/website-reference-assets/
+/studies/

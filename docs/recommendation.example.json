@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "recommended_model": "openrouter/auto",
+  "models": {
+    "clean": "openrouter/auto",
+    "email": "openrouter/auto",
+    "notes": "openrouter/auto"
+  }
+}

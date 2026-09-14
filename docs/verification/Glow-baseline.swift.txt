@@ -1,0 +1,100 @@
+import AppKit
+import SwiftUI
+
+enum S2TTheme {
+    static let background = Color(nsColor: .windowBackgroundColor)
+    static let spectrum: [Color] = [
+        Color(red: 0.20, green: 0.72, blue: 1),
+        Color(red: 0.36, green: 0.44, blue: 1),
+        Color(red: 0.70, green: 0.35, blue: 1),
+        Color(red: 1, green: 0.32, blue: 0.64),
+        Color(red: 1, green: 0.60, blue: 0.35)
+    ]
+}
+
+struct VoiceEdge: Shape {
+    var amplitude: Double
+    var phase: Double
+    var animatableData: AnimatablePair<Double, Double> {
+        get { AnimatablePair(amplitude, phase) }
+        set { amplitude = newValue.first; phase = newValue.second }
+    }
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: 0, y: rect.height))
+        for step in 0...160 {
+            let x = Double(step) / 160
+            let envelope = pow(sin(x * .pi), 0.8)
+            let wave = 0.67 + 0.19 * sin(x * 3 * .pi + phase) + 0.14 * cos(x * 7 * .pi - phase * 0.7)
+            let height = 2.5 + envelope * (4 + amplitude * 52) * wave
+            path.addLine(to: CGPoint(x: x * rect.width, y: rect.height - height))
+        }
+        path.addLine(to: CGPoint(x: rect.width, y: rect.height))
+        path.closeSubpath()
+        return path
+    }
+}
+
+struct BottomGlow: View {
+    let level: Double
+    let strength: Double
+    let phase: DictationPhase
+    var timeOverride: Double? = nil
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: reduceMotion || timeOverride != nil)) { timeline in
+            let time = timeOverride ?? timeline.date.timeIntervalSinceReferenceDate
+            let working = phase == .processing || phase == .transcribing || phase == .preparing
+            let amplitude = reduceMotion ? 0.15 : (working ? 0.18 + 0.09 * sin(time * 2) : level) * strength
+            let colors = phase == .failed ? [Color.orange, Color.red.opacity(0.8)] : S2TTheme.spectrum
+            let gradient = LinearGradient(colors: colors, startPoint: .leading, endPoint: .trailing)
+            ZStack(alignment: .bottom) {
+                VoiceEdge(amplitude: amplitude * 1.6 + 0.15, phase: reduceMotion ? 0 : time * 1.7)
+                    .fill(gradient).blur(radius: 25).opacity(0.65)
+                VoiceEdge(amplitude: amplitude, phase: reduceMotion ? 0 : time * 1.7)
+                    .fill(gradient).blur(radius: 8).opacity(0.95)
+                VoiceEdge(amplitude: amplitude * 0.33, phase: reduceMotion ? 0 : time * 1.7)
+                    .fill(gradient).blur(radius: 2)
+                Rectangle().fill(gradient).frame(height: 2).blur(radius: 0.6)
+            }
+            .clipped()
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+}
+
+struct OverlayContent: View {
+    @ObservedObject var state: AppState
+    var body: some View {
+        BottomGlow(level: state.level, strength: state.glowStrength, phase: state.phase)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+@MainActor final class GlowWindowController {
+    private var panel: NSPanel?
+    private let state: AppState
+    init(state: AppState) { self.state = state }
+
+    func update(visible: Bool) {
+        guard visible else { panel?.orderOut(nil); return }
+        if panel == nil {
+            let panel = NSPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+            panel.isOpaque = false
+            panel.backgroundColor = .clear
+            panel.hasShadow = false
+            panel.ignoresMouseEvents = true
+            panel.hidesOnDeactivate = false
+            panel.level = .statusBar
+            panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
+            panel.contentView = NSHostingView(rootView: OverlayContent(state: state))
+            self.panel = panel
+        }
+        let pointer = NSEvent.mouseLocation
+        guard let screen = NSScreen.screens.first(where: { $0.frame.contains(pointer) }) ?? NSScreen.main else { return }
+        panel?.setFrame(NSRect(x: screen.frame.minX, y: screen.frame.minY, width: screen.frame.width, height: 150), display: true)
+        panel?.orderFrontRegardless()
+    }
+}

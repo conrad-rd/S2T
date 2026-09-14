@@ -1,0 +1,77 @@
+import AppKit
+import SwiftUI
+
+/// Stable contour images are reused; speech only transforms their samples.
+enum ContourMask {
+    private static let images: NSCache<NSString, NSImage> = {
+        let cache = NSCache<NSString, NSImage>()
+        cache.countLimit = 24
+        cache.totalCostLimit = 32 * 1024 * 1024
+        return cache
+    }()
+
+    static func cached(key: String, create: () -> NSImage?) -> NSImage? {
+        if let image = images.object(forKey: key as NSString) { return image }
+        guard let image = create() else { return nil }
+        images.setObject(image, forKey: key as NSString, cost: Int(image.size.width * image.size.height * 16))
+        return image
+    }
+
+    static func render(size: CGSize, scale: CGFloat = 1, draw: (CGContext) -> Void) -> NSImage? {
+        guard size.width > 0, size.height > 0 else { return nil }
+        let width = Int(ceil(size.width * scale)), height = Int(ceil(size.height * scale))
+        guard let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: width, pixelsHigh: height,
+            bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+            colorSpaceName: .deviceRGB, bytesPerRow: width * 4, bitsPerPixel: 32),
+              let context = NSGraphicsContext(bitmapImageRep: bitmap)?.cgContext else { return nil }
+        context.clear(CGRect(x: 0, y: 0, width: width, height: height))
+        context.translateBy(x: 0, y: CGFloat(height))
+        context.scaleBy(x: CGFloat(width) / size.width, y: -CGFloat(height) / size.height)
+        draw(context)
+        bitmap.size = size
+        let image = NSImage(size: size)
+        image.addRepresentation(bitmap)
+        return image
+    }
+
+    static func stroked(path: Path, size: CGSize, extent: Double, scale: CGFloat,
+                        coverage: (Double) -> Double) -> NSImage? {
+        render(size: size, scale: scale) { context in
+            context.setBlendMode(.copy)
+            context.setLineCap(.round)
+            context.setLineJoin(.round)
+            for step in stride(from: Int(ceil(extent * scale)), through: 1, by: -1) {
+                let distance = Double(step) / scale
+                context.setStrokeColor(CGColor(gray: 1, alpha: coverage(max(0, distance - 1 / scale))))
+                context.setLineWidth(distance * 2)
+                context.addPath(path.cgPath)
+                context.strokePath()
+            }
+        }
+    }
+
+    static func transformed(_ image: NSImage, size: CGSize, transform: CGAffineTransform,
+                            exterior: Path, illumination: (Double) -> Double,
+                            bounds: ClosedRange<CGFloat>) -> NSImage? {
+        guard let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return nil }
+        return render(size: size) { context in
+            context.addPath(exterior.cgPath)
+            context.clip(using: .evenOdd)
+            context.saveGState()
+            context.concatenate(transform)
+            context.translateBy(x: 0, y: size.height)
+            context.scaleBy(x: 1, y: -1)
+            context.interpolationQuality = .high
+            context.draw(cgImage, in: CGRect(origin: .zero, size: size))
+            context.restoreGState()
+            context.setBlendMode(.destinationIn)
+            let positions = (0...32).map { CGFloat($0) / 32 }
+            let colors = positions.map { CGColor(gray: 1, alpha: illumination($0)) }
+            if let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceGray(), colors: colors as CFArray, locations: positions) {
+                context.drawLinearGradient(gradient, start: CGPoint(x: bounds.lowerBound, y: 0),
+                    end: CGPoint(x: bounds.upperBound, y: 0), options: [.drawsBeforeStartLocation, .drawsAfterEndLocation])
+            }
+
+        }
+    }
+}

@@ -139,6 +139,11 @@ export function configuration(env = process.env) {
     requireThat(users.length > 0 && users.length <= 10 && users.every(value => /^user_[A-Za-z0-9]+$/.test(value)), "config", "Real-provider sandbox testing requires an explicit Clerk user allowlist.");
     config.allowedAccounts = users.map(user => hash(`${config.identity.issuer}:${user}`));
   }
+  if (env.RENDER) {
+    requireThat(mode !== "demo" && config.identity && config.clerk, "config", "Hosted credits require customer sign-in and test or live billing.");
+    requireThat(new URL(config.origin).protocol === "https:" && new URL(config.origin).origin === config.origin, "config", "Hosted credits require an exact HTTPS origin.");
+    requireThat(dataDir === "/var/data/s2t", "config", "Render must mount the persistent credits disk at /var/data/s2t.");
+  }
   if (mode !== "live" && config.stripeKey)
     requireThat(
       /^(sk|rk)_test_/.test(config.stripeKey),

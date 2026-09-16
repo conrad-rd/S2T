@@ -97,13 +97,15 @@ export function createApplication(config, { execute, stripeClient } = {}) {
         "Sign in with the configured identity provider.",
         401,
       );
+      let subject;
       try {
-        const authenticated = ledger.identity(await identity(token));
-        requireThat(!config.allowedAccounts || config.allowedAccounts.includes(authenticated.id), "staging_access", "This test service is restricted to approved testers.", 403);
-        return authenticated;
+        subject = await identity(token);
       } catch {
         throw new Fault("authentication", "Account authentication failed.", 401);
       }
+      const authenticated = ledger.identity(subject);
+      requireThat(!config.allowedAccounts || config.allowedAccounts.includes(authenticated.id), "staging_access", "This test service is restricted to approved testers.", 403);
+      return authenticated;
     }
     const token =
       req.headers.cookie
@@ -311,7 +313,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const app = createApplication(config);
   app.server.listen(config.port, config.host, () =>
     console.log(
-      `S2T Credits: http://localhost:${config.port} (${config.mode}; ${config.mode === "live" ? "bounded provider access" : "no real provider spending"})`,
+      `S2T Credits: ${config.origin} (${config.mode}; ${config.realProviders ? "bounded provider access" : "no real provider spending"})`,
     ),
   );
   let closing = false;

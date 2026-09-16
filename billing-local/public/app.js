@@ -138,7 +138,7 @@ async function refresh() {
   const requests = $("requests");
   requests.replaceChildren();
   if (!account.requests.length)
-    empty(requests, "No requests yet. Try a metered demo request above.");
+    empty(requests, demo ? "No requests yet. Try a metered demo request above." : "Your dictation and cleanup usage will appear here.");
   for (const r of account.requests) {
     const row = document.createElement("div");
     row.className = "transaction";
@@ -227,6 +227,8 @@ $("try-request").addEventListener("click", async () => {
 });
 async function start() {
   const config = await (await fetch("/api/config")).json();
+  $("mode-badge").textContent = config.mode === "demo" ? "Local preview" : config.mode === "test" ? "Stripe sandbox" : "S2T credits";
+  $("footer-mode").textContent = config.mode === "demo" ? "Local preview · No real payments" : config.mode === "test" ? "Sandbox · No real payments" : "Prepaid transcription and cleanup";
   if (config.clerk) {
     const load = (path, attributes = {}) => new Promise((resolve, reject) => {
       const script = document.createElement("script");

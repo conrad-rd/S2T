@@ -1,6 +1,6 @@
 # S2T credit purchases
 
-Use Render for the server, Clerk for customer accounts, and Stripe Checkout for one-time top-ups. Keep the marketing website on its existing host. The server keeps its SQLite ledger on a persistent disk. Run one instance. A second instance or serverless deployment needs a different database design.
+Use Cloudflare Workers with one SQLite Durable Object for the credit ledger, Clerk for customer accounts, and Stripe Checkout for top-ups. The hosted test service is https://s2t-credits.ae-chef-license.workers.dev. The existing Node server remains available for isolated local verification. No Render service is required.
 
 Customers buy S2T credits. The server spends money from dedicated S2T provider accounts and deducts each customer's measured usage. Provider balances and customer balances are separate. A Stripe payment does not automatically refill a provider account.
 
@@ -23,7 +23,13 @@ Test mode uses synthetic provider responses. Its funds and keys cannot become li
 
 ## Hosted staging
 
-`render.yaml` describes a single paid Render service with a persistent disk, starting in Stripe test mode. `Dockerfile` installs production dependencies without local databases or secrets. Set the public HTTPS origin to the service's actual address, configure Clerk and Stripe, and register the webhook URL. Use server environment secrets for Stripe and provider credentials. The deployment branch is `codex/hosted-credits`. Publish only the `billing-local` service from that branch. Build the Mac app with `S2T_CREDITS_URL` set to the verified hosted origin so Sign in works without entering an address.
+`wrangler.jsonc` configures the Cloudflare deployment and static dashboard. From `billing-local`, run `npm run test:cloudflare`, then `npm run deploy:cloudflare`. Stay on the Workers Free plan. No paid-plan upgrade is performed by these commands. Free-limit exhaustion rejects requests; it does not grant credits or release uncertain reservations.
+
+Store `S2T_RESULT_KEY`, `STRIPE_SECRET_KEY`, and `STRIPE_WEBHOOK_SECRET` as Worker secrets. The encryption key is 32 random bytes encoded as hex and must remain stable across deployments. Stripe sends checkout completion, asynchronous payment success, refund, and dispute events to `/api/stripe/webhook`. See `stripe-billing.mjs` for the exact event names.
+
+The Durable Object is selected by billing mode, so test and live ledgers remain separate. Synchronous SQL transactions protect balances, and the gateway waits for durable storage before sending provider requests. Restart recovery retains uncertain reservations. Preserve this single-ledger design until global budget coordination has been redesigned.
+
+The deployment source branch is `codex/hosted-credits`. Build the Mac app with `S2T_CREDITS_URL=https://s2t-credits.ae-chef-license.workers.dev` so Sign in opens the deployed service.
 
 Do not paste provider master keys into chat or embed them in the Mac app. Create dedicated provider keys for S2T, restrict them where supported, and enter them directly in the host's secret settings. Start with small prepaid balances and auto-refill off. The existing live configuration requires documented external spending limits; do not bypass those checks by inventing evidence. Provider auto-refill can be reconsidered after measured staging usage and an explicit spending policy.
 
@@ -31,21 +37,23 @@ Do not paste provider master keys into chat or embed them in the Mac app. Create
 
 Stripe sandbox normally returns synthetic provider results. To test real dictation without real payments, set `S2T_STAGING_REAL_PROVIDERS=explicitly-enabled` and `S2T_STAGING_USERS` to the approved Clerk user IDs, separated by commas. Every dashboard and app request checks this allowlist. Keep the Stripe key in test mode.
 
-This mode also requires the live-mode provider controls, pricing, OIDC configuration, and result encryption key described in `config.mjs`. Put provider keys in Render secrets. Add reviewed pricing and provider-limit JSON as Render secret files and point `S2T_PRICING_FILE` and `S2T_PROVIDER_LIMITS_FILE` at their `/etc/secrets/` paths. Do not use fixture values as evidence of real account limits. Start with only the routes whose provider accounts have been configured.
+This mode also requires the live-mode provider controls, pricing, OIDC configuration, and result encryption key described in `config.mjs`. Put provider keys in Cloudflare Worker secrets. Store reviewed pricing and provider-limit JSON as `S2T_PRICING_JSON` and `S2T_PROVIDER_LIMITS_JSON`. The Worker maps these into the shared configuration checks. Set OIDC issuer and JWKS to the configured Clerk domain, and audience to `s2t-credits`. Do not use fixture values as evidence of real account limits. Start with only the routes whose provider accounts have been configured.
 
-For the Stripe server key, create a sandbox restricted key with Checkout Sessions write access and Payment Intents, Refunds, and Disputes read access. The legacy Payment Link path additionally needs Payment Links read access. Store it as `STRIPE_SECRET_KEY` in Render. CLI authorization is for administration and is not a permanent server credential.
+For the Stripe server key, create a sandbox restricted key with Checkout Sessions write access and Payment Intents, Refunds, and Disputes read access. The legacy Payment Link path additionally needs Payment Links read access. Store it as `STRIPE_SECRET_KEY` in Cloudflare. CLI authorization is for administration and is not a permanent server credential.
 
 ## Before live purchases
 
-The implementation is locally verified, not a launched payment service. Actual Clerk sign-in, Stripe sandbox events, provider billing, and Render deployment require your external accounts and have not been exercised here. Production still needs reviewed provider prices and billing rounding, a decision on taxes and Stripe fees, independent provider usage reconciliation, monitoring, consistent encrypted backups and restore checks, and a policy for retained encrypted results. The current policy blocks usage when reconciliation or pricing becomes overdue. These restrictions remain in force.
+The service is deployed in Stripe test mode. Test credit balances do not represent real purchases. Live provider access stays disabled until dedicated provider credentials and reviewed limits are configured. Production still needs reviewed provider prices and billing rounding, a decision on taxes and Stripe fees, independent provider usage reconciliation, monitoring, consistent encrypted backups and restore checks, and a policy for retained encrypted results. The current policy blocks usage when reconciliation or pricing becomes overdue. These restrictions remain in force.
 
 The current credit conversion is inherited from the prototype: $1 buys 100 credits funding $0.90 of provider usage. The remaining $0.10 is before Stripe fees, infrastructure, refunds, and taxes. Do not treat that as a confirmed profit margin. Taxes, discounts, and shipping are rejected by fulfillment until a matching pricing policy exists.
 
 ## Verification
 
+- `npm run test:cloudflare`: real Cloudflare local runtime with isolated durable storage, mocked Clerk/Stripe endpoints, payment replay, simultaneous requests, exact balances, and persistence across runtime restarts.
+- `node hosted-check.mjs`: deployed service and real Clerk development test account. It uses short-lived test sign-in tokens and never screenshots.
 - `npm test`: ledger, checkout, payment, identity, provider, and failure cases with isolated fixtures.
 - `npm run test:browser`: starts its own temporary service and drives the dashboard without screenshots or clipboard access.
 - `npm run test:native`: starts an isolated demo service and exercises the packaged Mac client's real HTTP transport, authentication, editing request, and exact balance change.
 - `build/S2T.app/Contents/MacOS/S2T --verify-credits`: preview-only native settings, key masking, readiness, and supported-route checks.
 
-Reference documentation: [Render disks](https://render.com/docs/disks), [Clerk JavaScript setup](https://clerk.com/docs/js-frontend/getting-started/quickstart), [Clerk JWT templates](https://clerk.com/docs/guides/sessions/jwt-templates), and [Stripe Checkout](https://docs.stripe.com/api/checkout/sessions/create).
+Reference documentation: [Cloudflare Durable Objects pricing](https://developers.cloudflare.com/durable-objects/platform/pricing/), [Clerk JavaScript setup](https://clerk.com/docs/js-frontend/getting-started/quickstart), [Clerk JWT templates](https://clerk.com/docs/guides/sessions/jwt-templates), and [Stripe Checkout](https://docs.stripe.com/api/checkout/sessions/create).

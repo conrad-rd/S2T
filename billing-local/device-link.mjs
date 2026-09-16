@@ -1,5 +1,5 @@
 import { randomBytes, createHmac } from 'node:crypto';
-import { hash } from './ledger.mjs';
+import { hash } from './ledger-core.mjs';
 import { requireThat } from './money.mjs';
 export function createDeviceLink({ ledger, mode, encryptionKey, origin }) {
   const deriveKey = tokenHash => `s2t_${mode}_` + createHmac('sha256', encryptionKey).update('s2t-device-key-v1:' + tokenHash).digest('hex');

@@ -21,7 +21,7 @@ export function createStripeBilling({
     );
     let event;
     try {
-      event = Stripe.webhooks.constructEvent(raw, signature, secret, 300);
+      event = await Stripe.webhooks.constructEventAsync(raw, signature, secret, 300);
     } catch {
       requireThat(false, "signature", "Invalid Stripe signature.", 400);
     }

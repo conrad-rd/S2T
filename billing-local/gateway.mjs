@@ -1,7 +1,7 @@
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { prepareRequest } from "./policy.mjs";
 import { requireThat, Fault, credits } from "./money.mjs";
-export function createGateway({ ledger, policy, execute, encryptionKey }) {
+export function createGateway({ ledger, policy, execute, encryptionKey, confirmReservation = async () => {} }) {
   requireThat(
     Buffer.isBuffer(encryptionKey) && encryptionKey.length === 32,
     "config",
@@ -11,7 +11,7 @@ export function createGateway({ ledger, policy, execute, encryptionKey }) {
     const iv = randomBytes(12),
       cipher = createCipheriv("aes-256-gcm", encryptionKey, iv);
     cipher.setAAD(Buffer.from(id));
-    const data = Buffer.concat([cipher.update(JSON.stringify(value)), cipher.final()]);
+    const data = Buffer.concat([cipher.update(JSON.stringify(value), "utf8"), cipher.final()]);
     return Buffer.concat([iv, cipher.getAuthTag(), data]).toString("base64");
   };
   const decrypt = (id, value) => {
@@ -65,6 +65,7 @@ export function createGateway({ ledger, policy, execute, encryptionKey }) {
         throw error;
       }
       try {
+        await confirmReservation();
         const receipt = await execute(prepared);
         const result = encrypt(request.id, { text: receipt.text, model: receipt.model, host: receipt.host });
         const settled = ledger.settle(request.id, {

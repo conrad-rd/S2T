@@ -1,9 +1,9 @@
 # S2T Credits
 
-See [SETUP.md](SETUP.md) for the local app connection, Clerk sign-in, Stripe Checkout Sessions, and Render staging setup. These are implemented locally. External staging and live deployment have not run.
+The Cloudflare test service is [S2T Credits](https://s2t-credits.ae-chef-license.workers.dev). See [SETUP.md](SETUP.md) for app sign-in, Stripe Checkout, secrets, and deployment. The service uses a SQLite Durable Object and targets the Workers Free limits. Real provider access remains disabled until dedicated credentials and reviewed spending controls are configured.
 
 
-Run `npm start` from this folder, then open http://localhost:4317. The main website's Credits button opens this page. Node 22.13 or newer is required. The service listens only on 127.0.0.1.
+Run `npm start` from this folder, then open http://localhost:4317. Node 22.13 or newer is required. The service listens only on 127.0.0.1.
 
 The local dashboard now uses the transactional billing ledger. Add demo credits, create a key, run a metered synthetic request, inspect the remaining balance, and revoke the key. A synthetic request costs 0.01 demo credit. No real provider request or payment occurs in demo mode.
 

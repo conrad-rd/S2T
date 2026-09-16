@@ -66,7 +66,7 @@ export function createGateway({ ledger, policy, execute, encryptionKey }) {
       }
       try {
         const receipt = await execute(prepared);
-        const result = encrypt(request.id, { text: receipt.text, model: receipt.model });
+        const result = encrypt(request.id, { text: receipt.text, model: receipt.model, host: receipt.host });
         const settled = ledger.settle(request.id, {
           ...receipt,
           result,

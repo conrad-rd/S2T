@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { hash } from "./ledger.mjs";
 import { requireThat } from "./money.mjs";
 import { fixturePolicy, validatePolicy } from "./policy.mjs";
 export function configuration(env = process.env) {
@@ -10,6 +11,8 @@ export function configuration(env = process.env) {
     "config",
     "S2T_BILLING_MODE must be demo, test, or live.",
   );
+  const realProviders = mode === "live" || env.S2T_STAGING_REAL_PROVIDERS === "explicitly-enabled";
+  requireThat(!realProviders || mode !== "demo", "config", "Demo mode cannot use real providers.");
   const port = Number(env.PORT || 4317);
   requireThat(Number.isInteger(port) && port > 0 && port < 65536, "config", "Invalid port.");
   const root = fileURLToPath(new URL(".", import.meta.url));
@@ -18,7 +21,9 @@ export function configuration(env = process.env) {
   );
   const config = {
     mode,
+    realProviders,
     port,
+    host: env.S2T_BIND_HOST || "127.0.0.1",
     dataDir,
     root,
     origin: env.S2T_PUBLIC_ORIGIN || `http://localhost:${port}`,
@@ -29,7 +34,7 @@ export function configuration(env = process.env) {
     stripeKey: env.STRIPE_SECRET_KEY,
     paymentLink: "https://buy.stripe.com/dRmbJ18vB4d5f6g2BV8IU02",
   };
-  if (mode === "live") {
+  if (realProviders) {
     requireThat(
       !env.VERCEL,
       "deployment",
@@ -42,7 +47,7 @@ export function configuration(env = process.env) {
       "S2T_OIDC_JWKS_URL",
       "STRIPE_SECRET_KEY",
       "STRIPE_WEBHOOK_SECRET",
-      "STRIPE_LIVE_PAYMENT_LINK_ID",
+      "CLERK_PUBLISHABLE_KEY",
       "S2T_PRICING_FILE",
       "S2T_PROVIDER_LIMITS_FILE",
       "S2T_RESULT_KEY",
@@ -61,9 +66,9 @@ export function configuration(env = process.env) {
         "Identity provider URLs must use HTTPS.",
       );
     requireThat(
-      /^(sk|rk)_live_/.test(env.STRIPE_SECRET_KEY),
+      (mode === "live" ? /^(sk|rk)_live_/ : /^(sk|rk)_test_/).test(env.STRIPE_SECRET_KEY),
       "config",
-      "A live Stripe server key is required.",
+      "Stripe credentials must match the selected billing mode.",
     );
     requireThat(
       /^[a-f0-9]{64}$/.test(env.S2T_RESULT_KEY),
@@ -71,7 +76,7 @@ export function configuration(env = process.env) {
       "S2T_RESULT_KEY must be 32 random bytes encoded as hex.",
     );
     requireThat(
-      env.S2T_ENABLE_LIVE_SPENDING === "explicitly-enabled",
+      mode !== "live" || env.S2T_ENABLE_LIVE_SPENDING === "explicitly-enabled",
       "config",
       "Live spending must be explicitly enabled after reviewing provider limits.",
     );
@@ -120,6 +125,19 @@ export function configuration(env = process.env) {
       jwks: env.S2T_OIDC_JWKS_URL,
     };
     config.resultKey = Buffer.from(env.S2T_RESULT_KEY, "hex");
+  }
+  if (env.CLERK_PUBLISHABLE_KEY) {
+    requireThat(/^pk_(test|live)_[A-Za-z0-9=]+$/.test(env.CLERK_PUBLISHABLE_KEY), "config", "Invalid Clerk publishable key.");
+    requireThat(mode !== "live" || env.CLERK_PUBLISHABLE_KEY.startsWith("pk_live_"), "config", "Live billing requires a production Clerk application.");
+    const domain = Buffer.from(env.CLERK_PUBLISHABLE_KEY.split("_")[2], "base64").toString().replace(/\$$/, "");
+    requireThat(/^[a-z0-9.-]+$/.test(domain) && domain.includes("."), "config", "Invalid Clerk domain.");
+    config.clerk = { publishableKey: env.CLERK_PUBLISHABLE_KEY, origin: `https://${domain}`, template: "s2t" };
+    config.identity = { issuer: env.S2T_OIDC_ISSUER || config.clerk.origin, audience: env.S2T_OIDC_AUDIENCE || "s2t-credits", jwks: env.S2T_OIDC_JWKS_URL || `${config.clerk.origin}/.well-known/jwks.json` };
+  }
+  if (realProviders && mode === "test") {
+    const users = (env.S2T_STAGING_USERS || "").split(",").map(value => value.trim()).filter(Boolean);
+    requireThat(users.length > 0 && users.length <= 10 && users.every(value => /^user_[A-Za-z0-9]+$/.test(value)), "config", "Real-provider sandbox testing requires an explicit Clerk user allowlist.");
+    config.allowedAccounts = users.map(user => hash(`${config.identity.issuer}:${user}`));
   }
   if (mode !== "live" && config.stripeKey)
     requireThat(

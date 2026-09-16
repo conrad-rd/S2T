@@ -8,12 +8,13 @@ export function createStripeBilling({
   apiKey,
   stripeClient,
   paymentLinkURL,
+  origin,
 }) {
   const stripe =
     stripeClient || (apiKey ? new Stripe(apiKey, { maxNetworkRetries: 0, timeout: 10000 }) : null);
   async function webhook(raw, signature) {
     requireThat(
-      secret && stripe && paymentLinkId,
+      secret && stripe,
       "stripe_disabled",
       "Stripe fulfillment is not configured.",
       503,
@@ -44,7 +45,7 @@ export function createStripeBilling({
       requireThat(
         session.id === id &&
           session.livemode === (mode === "live") &&
-          session.payment_link === paymentLinkId &&
+          (session.payment_link ? session.payment_link === paymentLinkId : !!session.metadata?.s2t_order) &&
           session.mode === "payment" &&
           session.currency === "usd",
         "checkout",
@@ -75,6 +76,7 @@ export function createStripeBilling({
         "account",
         "Checkout has no S2T account reference.",
       );
+      if (!session.payment_link) ledger.verifyCheckout(session.metadata.s2t_order, session.client_reference_id, session.amount_total, session.id);
       ledger.grant({
         account: session.client_reference_id,
         cents: session.amount_total,
@@ -103,7 +105,24 @@ export function createStripeBilling({
     }
     return { received: true };
   }
-  async function checkout(account) {
+  async function checkout(account, cents, idempotencyKey) {
+    if (cents !== undefined) {
+      requireThat(mode !== "demo" && stripe && origin && secret, "checkout_disabled", "Stripe checkout is not configured.", 503);
+      const order = ledger.checkoutOrder(account, cents, idempotencyKey);
+      if (order.url) return { url: order.url };
+      const session = await stripe.checkout.sessions.create({
+        mode: "payment",
+        integration_identifier: "s2t_credits_bqfrnxka",
+        client_reference_id: account,
+        metadata: { s2t_order: order.id },
+        line_items: [{ quantity: 1, price_data: { currency: "usd", unit_amount: cents, product_data: { name: "S2T credits", description: `${cents} credits for transcription and text cleanup` } } }],
+        success_url: `${origin}/?checkout=returned`,
+        cancel_url: `${origin}/?checkout=cancelled`,
+      }, { idempotencyKey: `s2t-checkout-${order.id}` });
+      requireThat(typeof session.url === "string" && new URL(session.url).origin === "https://checkout.stripe.com", "checkout_url", "Stripe did not return a checkout URL.", 503);
+      ledger.attachCheckout(order.id, session.id, session.url);
+      return { url: session.url };
+    }
     requireThat(
       mode === "live" && stripe && paymentLinkId,
       "checkout_disabled",

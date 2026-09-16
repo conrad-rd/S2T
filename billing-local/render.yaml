@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: s2t-credits
+    runtime: docker
+    rootDir: billing-local
+    plan: starter
+    healthCheckPath: /health
+    disk:
+      name: credits-ledger
+      mountPath: /var/data/s2t
+      sizeGB: 1
+    envVars:
+      - key: S2T_BILLING_MODE
+        value: test
+      - key: S2T_BIND_HOST
+        value: 0.0.0.0
+      - key: S2T_BILLING_DATA_DIR
+        value: /var/data/s2t
+      - key: S2T_PUBLIC_ORIGIN
+        sync: false
+      - key: CLERK_PUBLISHABLE_KEY
+        sync: false
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false

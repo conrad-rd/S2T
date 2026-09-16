@@ -1,5 +1,8 @@
 # S2T Credits
 
+See [SETUP.md](SETUP.md) for the local app connection, Clerk sign-in, Stripe Checkout Sessions, and Render staging setup. These are implemented locally. External staging and live deployment have not run.
+
+
 Run `npm start` from this folder, then open http://localhost:4317. The main website's Credits button opens this page. Node 22.13 or newer is required. The service listens only on 127.0.0.1.
 
 The local dashboard now uses the transactional billing ledger. Add demo credits, create a key, run a metered synthetic request, inspect the remaining balance, and revoke the key. A synthetic request costs 0.01 demo credit. No real provider request or payment occurs in demo mode.
@@ -35,11 +38,11 @@ Store data on a persistent local volume. `S2T_BILLING_DATA_DIR` overrides `.data
 
 ## API
 
-User-account endpoints use the local browser cookie in demo/test mode, or a verified OIDC bearer token in live mode. The browser UI is a local demo client; production sign-in/account recovery and a live checkout interface still need integration with the selected identity provider.
+User-account endpoints use the local browser cookie in demo/test mode, or a verified OIDC bearer token in live mode. The browser UI is a local demo client; the browser now supports Clerk sign-in and recovery through Clerk account controls. Configure the `s2t` JWT template and publishable key as described in SETUP.md.
 
 - `GET /api/account`: account balance, reservations, keys, and recent requests.
 - `POST /api/keys`: issue a key once. `POST /api/keys/revoke` with `{ "id": "key-id" }` revokes it.
-- `POST /api/checkout`: live-only. Verifies the configured Payment Link matches the supplied URL and permits a bounded USD purchase before adding the authenticated account reference.
+- `POST /api/checkout`: test/live with configured Stripe secrets. Accepts `{ "cents": 500 }` and a stable `Idempotency-Key`, then creates an account-bound Checkout Session for that exact amount. A stored purchase cannot change its amount or payment session.
 - `POST /api/stripe/webhook`: signed Stripe events. Never use the browser success page as proof of payment.
 
 Provider endpoints require `Authorization: Bearer <S2T-key>`:
@@ -61,7 +64,7 @@ Transcription request body:
 {"provider":"assemblyai","operation":"transcription","audio":"<base64 mono 16-bit PCM WAV>"}
 ```
 
-The current reviewed route shapes are OpenRouter cleanup through `openai/gpt-oss-120b` on `cerebras/fp16`, AssemblyAI Sync, and ElevenLabs Scribe v2. Audio is limited to two minutes. Other models, long batch transcription, OpenRouter audio/image requests, and native Mac app integration are not enabled. No silent provider fallback occurs.
+The current reviewed route shapes are OpenRouter cleanup through `openai/gpt-oss-120b` on `cerebras/fp16`, AssemblyAI Sync, and ElevenLabs Scribe v2. Audio is limited to two minutes. Other models, long batch transcription, OpenRouter audio/image requests, are not enabled. Native Mac integration supports these reviewed routes through Settings → Models → S2T credits. No silent provider fallback occurs.
 
 ## Operation and recovery
 
@@ -99,7 +102,7 @@ Live mode requires these environment settings, read only on the server:
 - `S2T_BILLING_MODE=live`, `S2T_ENABLE_LIVE_SPENDING=explicitly-enabled`
 - `S2T_PUBLIC_ORIGIN`, an exact HTTPS origin
 - `S2T_OIDC_ISSUER`, `S2T_OIDC_AUDIENCE`, `S2T_OIDC_JWKS_URL`
-- `STRIPE_SECRET_KEY`, preferably a restricted live key with only required read permissions; `STRIPE_WEBHOOK_SECRET`; `STRIPE_LIVE_PAYMENT_LINK_ID`
+- `STRIPE_SECRET_KEY`, a restricted live key with Checkout Session creation and the read permissions needed for payment, refund, and dispute verification; `STRIPE_WEBHOOK_SECRET`; `CLERK_PUBLISHABLE_KEY`
 - `S2T_PRICING_FILE`, a reviewed policy matching `policy.mjs`, with an expiry no more than 24 hours away
 - `S2T_PROVIDER_LIMITS_FILE`, operator evidence of dedicated provider limits reviewed within 24 hours
 - `S2T_RESULT_KEY`, 32 random bytes encoded as 64 hex characters, stored in a secret manager
@@ -107,7 +110,7 @@ Live mode requires these environment settings, read only on the server:
 
 External-limit evidence must contain `reviewedAt` and a `providers` object. Each enabled provider needs `autoRecharge: false`, `overdraftDisabled: true`, a positive `hardCapUsd`, and an `evidence` description. Initial combined external caps cannot exceed $20. This is operator-supplied evidence, not an automatic check or configuration of the provider's limits. If a provider cannot enforce a suitable cap, keep it disabled. A warning email or budget alert is not a spending cap.
 
-Before taking customer money: connect sign-in/recovery, confirm the actual Payment Link configuration and tax treatment, verify dedicated provider limits, replace fixture prices with reviewed contracted rates and billing rounding, run spending-capped staging calls, automate provider report collection, configure monitoring and consistent backups, implement result retention, integrate the native app, and obtain an independent security review. Unsupported taxes, discounts, and shipping are rejected rather than silently granting the wrong amount; resolve that business policy before enabling checkout.
+Before taking customer money: exercise configured Clerk sign-in/recovery and Stripe checkout, confirm tax treatment, verify dedicated provider limits, replace fixture prices with reviewed contracted rates and billing rounding, run spending-capped staging calls, automate provider report collection, configure monitoring and consistent backups, implement result retention, and obtain an independent security review. Unsupported taxes, discounts, and shipping are rejected rather than silently granting the wrong amount; resolve that business policy before enabling checkout.
 
 This server intentionally refuses live mode on Vercel. SQLite on a function's temporary filesystem cannot be the financial authority. Keep the website on Vercel; either deploy this service on one persistent host or port the transaction layer to managed PostgreSQL and retest concurrency and recovery before deploying Vercel functions.
 

@@ -1,5 +1,27 @@
 const $ = (id) => document.getElementById(id);
 let account;
+let clerk;
+let purchaseAttempt;
+let refreshGeneration = 0;
+const connectionCode = new URLSearchParams(location.search).get("connect");
+if (connectionCode && /^[A-F0-9]{12}$/.test(connectionCode)) sessionStorage.setItem("s2t-connect-code", connectionCode);
+const pendingConnection = sessionStorage.getItem("s2t-connect-code");
+if (pendingConnection) {
+  $("connect-panel").hidden = false;
+  $("connect-code").textContent = pendingConnection.match(/.{1,4}/g).join("-");
+}
+$("connect-approve").addEventListener("click", async () => {
+  $("connect-approve").disabled = true;
+  try {
+    await api("/api/device/approve", { userCode: pendingConnection });
+    sessionStorage.removeItem("s2t-connect-code");
+    $("connect-status").textContent = "Connected. Return to S2T. You can add credits here whenever needed.";
+    await refresh();
+  } catch (error) {
+    $("connect-status").textContent = error.message;
+    $("connect-approve").disabled = false;
+  }
+});
 const money = (cents) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
 const number = (value) =>
@@ -11,16 +33,12 @@ function status(message) {
   $("status").textContent = message;
 }
 async function api(path, body, headers = {}) {
-  const res = await fetch(
-    path,
-    body === undefined
-      ? {}
-      : {
-          method: "POST",
-          headers: { "Content-Type": "application/json", ...headers },
-          body: JSON.stringify(body),
-        },
-  );
+  const token = clerk?.session ? await clerk.session.getToken({ template: "s2t" }) : null;
+  const res = await fetch(path, {
+    method: body === undefined ? "GET" : "POST",
+    headers: { ...(body === undefined ? {} : { "Content-Type": "application/json" }), ...(token ? { Authorization: `Bearer ${token}` } : {}), ...headers },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  });
   const data = await res.json();
   if (!res.ok) throw Error(data.error);
   return data;
@@ -29,8 +47,8 @@ function updateAmount() {
   const cents = amount(),
     valid = $("amount").validity.valid && cents >= 100 && cents <= 10000;
   $("preview-credits").textContent = valid ? number(cents) : "—";
-  $("purchase").disabled = !valid || (account && account.mode !== "demo");
-  $("purchase").textContent = valid ? `Try a ${money(cents)} demo top-up ↗` : "Choose $1 to $100";
+  $("purchase").disabled = !valid || !account || (account.mode !== "demo" && !account.checkoutEnabled) || account.frozen;
+  $("purchase").textContent = valid ? account?.mode === "demo" ? `Try a ${money(cents)} demo top-up ↗` : `Buy ${number(cents)} credits for ${money(cents)} ↗` : "Choose $1 to $100";
   document
     .querySelectorAll("[data-amount]")
     .forEach((b) => b.setAttribute("aria-pressed", Number(b.dataset.amount) * 100 === cents));
@@ -42,17 +60,27 @@ function empty(container, text) {
   container.append(p);
 }
 async function refresh() {
-  account = await api("/api/account");
+  const generation = ++refreshGeneration;
+  const updated = await api("/api/account");
+  if (generation !== refreshGeneration) return;
+  account = updated;
   $("balance").textContent = number(account.available);
   $("held-balance").textContent =
     account.reserved > 0
       ? `${number(account.reserved)} credits reserved for pending requests.`
       : "No credits reserved.";
-  $("stripe-link").href = account.paymentLink;
+  const demo = account.mode === "demo";
+  $("account-content").hidden = false;
+  $("mode-badge").textContent = demo ? "Local preview" : account.mode === "test" ? "Stripe sandbox" : "S2T credits";
+  $("wallet-mode").textContent = demo ? "Demo wallet" : account.mode === "test" ? "Test wallet" : "Prepaid wallet";
+  $("purchase-note").textContent = demo ? "Demo only. No payment is taken and these credits cannot buy API usage." : account.mode === "test" ? account.realProviders ? "Stripe sandbox for approved testers. Payments are simulated; dictation uses real providers." : "Stripe sandbox. Use test payment details. Provider requests remain synthetic." : "One-time purchase through Stripe. Credits appear after payment is confirmed. No automatic refill.";
+  $("create-key").textContent = demo ? "Create demo key" : "Create S2T key";
+  $("demo-panel").hidden = !demo;
+  $("footer-mode").textContent = demo ? "Local preview · No real payments" : account.mode === "test" ? account.realProviders ? "Private sandbox · Real dictation" : "Sandbox · No real provider usage" : "Prepaid transcription and cleanup";
   const active = account.keys.filter((k) => !k.revoked && k.expires > Date.now());
-  $("create-key").disabled = account.balance <= 0 || active.length >= 10 || account.frozen;
+  $("create-key").disabled = active.length >= 10 || account.frozen;
   $("key-count").textContent = active.length
-    ? `${active.length} active demo key${active.length === 1 ? "" : "s"}.`
+    ? `${active.length} active key${active.length === 1 ? "" : "s"}.`
     : "";
   const keys = $("key-list");
   keys.replaceChildren();
@@ -141,9 +169,17 @@ document.querySelectorAll("[data-amount]").forEach((b) =>
 $("purchase").addEventListener("click", async () => {
   $("purchase").disabled = true;
   try {
-    await api("/api/demo/purchase", { cents: amount() });
-    await refresh();
-    status("Demo credits added. No payment was taken.");
+    if (account.mode === "demo") {
+      await api("/api/demo/purchase", { cents: amount() });
+      await refresh();
+      status("Demo credits added. No payment was taken.");
+    } else {
+      if (!purchaseAttempt || purchaseAttempt.cents !== amount()) purchaseAttempt = { cents: amount(), id: crypto.randomUUID() };
+      const checkout = await api("/api/checkout", { cents: purchaseAttempt.cents }, { "Idempotency-Key": purchaseAttempt.id });
+      const url = new URL(checkout.url);
+      if (url.origin !== "https://checkout.stripe.com") throw Error("Checkout returned an unexpected address.");
+      location.assign(url.href);
+    }
   } catch (e) {
     status(e.message);
   } finally {
@@ -158,7 +194,7 @@ $("create-key").addEventListener("click", async () => {
     $("key-value").value = data.key;
     await refresh();
     status(
-      "Demo key created. Copy it now. It can access only synthetic requests on this local server.",
+      account.mode === "live" || account.realProviders ? "S2T key created. Copy it now and save it in the Mac app." : "Test key created. Copy it now. Requests use synthetic providers.",
     );
   } catch (e) {
     status(e.message);
@@ -168,7 +204,7 @@ $("create-key").addEventListener("click", async () => {
 $("copy-key").addEventListener("click", async () => {
   try {
     await navigator.clipboard.writeText($("key-value").value);
-    status("Demo key copied.");
+    status("S2T key copied.");
   } catch {
     $("key-value").select();
     status("Select and copy the key from the field.");
@@ -189,6 +225,44 @@ $("try-request").addEventListener("click", async () => {
     await refresh();
   }
 });
-refresh().catch((e) => status(e.message));
+async function start() {
+  const config = await (await fetch("/api/config")).json();
+  if (config.clerk) {
+    const load = (path, attributes = {}) => new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = config.clerk.origin + path;
+      script.crossOrigin = "anonymous";
+      for (const [name, value] of Object.entries(attributes)) script.setAttribute(name, value);
+      script.onload = resolve;
+      script.onerror = () => reject(Error("Sign-in could not load. Please reload the page."));
+      document.head.append(script);
+    });
+    await load("/npm/@clerk/ui@1/dist/ui.browser.js");
+    await load("/npm/@clerk/clerk-js@6/dist/clerk.browser.js", { "data-clerk-publishable-key": config.clerk.publishableKey });
+    clerk = window.Clerk;
+    await clerk.load({ ui: { ClerkUI: window.__internal_ClerkUICtor } });
+    let lastUser;
+    clerk.addListener(({ user }) => {
+      if (lastUser === user?.id) return;
+      lastUser = user?.id;
+      refreshGeneration++;
+      account = null;
+      purchaseAttempt = null;
+      $("key-value").value = "";
+      $("key-result").hidden = true;
+      $("account-content").hidden = !user;
+      $("sign-in").hidden = !!user;
+      if (user) { clerk.unmountSignIn($("sign-in")); clerk.mountUserButton($("user-button")); refresh().catch(e => status(e.message)); }
+      else { clerk.mountSignIn($("sign-in")); }
+    });
+    if (!clerk.user) { $("sign-in").hidden = false; clerk.mountSignIn($("sign-in")); }
+  } else if (config.mode !== "live") await refresh();
+  else throw Error("Customer sign-in has not been configured.");
+  const returned = new URLSearchParams(location.search).get("checkout");
+  if (returned === "returned") status("Checking your balance. A checkout return alone does not confirm payment; credits appear after Stripe confirms it.");
+  if (returned === "cancelled") status("Checkout cancelled. No credits were added by this page.");
+}
+start().catch(e => status(e.message));
 updateAmount();
-window.addEventListener("focus", () => refresh().catch((e) => status(e.message)));
+window.addEventListener("focus", () => { if (account) refresh().catch(e => status(e.message)); });
+setInterval(() => { if (account && !document.hidden) refresh().catch(e => status(e.message)); }, 10000);

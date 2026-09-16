@@ -6,7 +6,10 @@
     "start": "node server.mjs",
     "test": "node --test integration.test.mjs tests/*.test.mjs",
     "test:browser": "node browser-check.mjs",
-    "admin": "node admin.mjs"
+    "admin": "node admin.mjs",
+    "test:native": "node native-check.mjs",
+    "start:env": "node --env-file=.env server.mjs",
+    "test:checkout-browser": "node payment-browser-check.mjs"
   },
   "engines": {
     "node": ">=22.13"

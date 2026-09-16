@@ -153,7 +153,7 @@ export function prepareRequest(body, policy, now = Date.now()) {
     "Invalid request.",
   );
   requireThat(
-    Object.keys(body).every((k) => ["provider", "operation", "text", "audio", "model"].includes(k)),
+    Object.keys(body).every((k) => ["provider", "operation", "text", "audio", "model", "instructions"].includes(k)),
     "request",
     "Unexpected request field.",
   );
@@ -170,12 +170,13 @@ export function prepareRequest(body, policy, now = Date.now()) {
       "text",
       "Text is empty or exceeds the configured limit.",
     );
+    requireThat(body.instructions === undefined || (typeof body.instructions === "string" && Buffer.byteLength(body.instructions) <= 16000), "instructions", "Editing instructions exceed the limit.");
     maxCost =
-      (Buffer.byteLength(body.text) + 1024) * p.inputMicrosPerToken +
+      (Buffer.byteLength(body.text) + Buffer.byteLength(body.instructions || "") + 1024) * p.inputMicrosPerToken +
       p.maxOutputTokens * p.outputMicrosPerToken;
-    prepared = { text: body.text };
+    prepared = { text: body.text, instructions: body.instructions };
   } else {
-    requireThat(body.text === undefined, "request", "Unexpected text field.");
+    requireThat(body.text === undefined && body.instructions === undefined, "request", "Unexpected text field.");
     prepared = parseWave(body.audio, p.maxSeconds);
     maxCost = Math.ceil(prepared.seconds) * p.microsPerSecond;
   }
@@ -185,7 +186,7 @@ export function prepareRequest(body, policy, now = Date.now()) {
     "Request cannot be priced within the approved ceiling.",
   );
   const fingerprint = createHash("sha256")
-    .update(JSON.stringify([body.provider, body.operation, p.model, prepared.text ?? body.audio]))
+    .update(JSON.stringify([body.provider, body.operation, p.model, prepared.text ?? body.audio, prepared.instructions ?? null]))
     .digest("hex");
   return {
     ...prepared,

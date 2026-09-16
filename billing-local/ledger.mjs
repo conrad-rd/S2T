@@ -23,8 +23,10 @@ export function openLedger(
     CREATE TABLE IF NOT EXISTS metadata(key TEXT PRIMARY KEY, value TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS accounts(id TEXT PRIMARY KEY, frozen INTEGER NOT NULL DEFAULT 0, created INTEGER NOT NULL);
     CREATE TABLE IF NOT EXISTS sessions(hash TEXT PRIMARY KEY, account TEXT NOT NULL REFERENCES accounts(id), expires INTEGER NOT NULL);
+    CREATE TABLE IF NOT EXISTS device_links(token_hash TEXT PRIMARY KEY, user_code TEXT UNIQUE NOT NULL, expires INTEGER NOT NULL, account TEXT REFERENCES accounts(id), key_id TEXT REFERENCES api_keys(id));
     CREATE TABLE IF NOT EXISTS api_keys(id TEXT PRIMARY KEY, hash TEXT UNIQUE NOT NULL, account TEXT NOT NULL REFERENCES accounts(id), suffix TEXT NOT NULL, revoked INTEGER NOT NULL DEFAULT 0, expires INTEGER NOT NULL);
     CREATE TABLE IF NOT EXISTS ledger(id TEXT PRIMARY KEY, account TEXT NOT NULL REFERENCES accounts(id), amount INTEGER NOT NULL CHECK(typeof(amount)='integer'), kind TEXT NOT NULL, reference TEXT UNIQUE NOT NULL, created INTEGER NOT NULL);
+    CREATE TABLE IF NOT EXISTS checkout_orders(id TEXT PRIMARY KEY, account TEXT NOT NULL REFERENCES accounts(id), dedup TEXT NOT NULL, cents INTEGER NOT NULL, created INTEGER NOT NULL, session TEXT UNIQUE, url TEXT, UNIQUE(account,dedup));
     CREATE TABLE IF NOT EXISTS payments(session TEXT PRIMARY KEY, intent TEXT UNIQUE NOT NULL, account TEXT NOT NULL REFERENCES accounts(id), cents INTEGER NOT NULL, reversed INTEGER NOT NULL DEFAULT 0, created INTEGER NOT NULL);
     CREATE TABLE IF NOT EXISTS reversals(id TEXT PRIMARY KEY, intent TEXT NOT NULL, cents INTEGER NOT NULL, kind TEXT NOT NULL CHECK(kind IN ('refund','dispute')), created INTEGER NOT NULL);
     CREATE TABLE IF NOT EXISTS requests(id TEXT PRIMARY KEY, account TEXT NOT NULL REFERENCES accounts(id), key_id TEXT REFERENCES api_keys(id), dedup TEXT NOT NULL, fingerprint TEXT NOT NULL, provider TEXT NOT NULL, model TEXT NOT NULL, price_version TEXT NOT NULL, reserved INTEGER NOT NULL CHECK(reserved>0), expense_reserved INTEGER NOT NULL CHECK(expense_reserved>=reserved), fee_bps INTEGER NOT NULL DEFAULT 0, cost INTEGER, charged INTEGER, expense INTEGER, state TEXT NOT NULL CHECK(state IN ('reserved','submitted','uncertain','settled','released')), provider_id TEXT, result TEXT, result_expires INTEGER, created INTEGER NOT NULL, updated INTEGER NOT NULL, reconciled INTEGER NOT NULL DEFAULT 0, UNIQUE(account,dedup), UNIQUE(provider,provider_id));
@@ -160,6 +162,31 @@ export function openLedger(
         now(),
       );
     },
+    startDevice(tokenHash, userCode) {
+      run("INSERT INTO device_links(token_hash,user_code,expires) VALUES(?,?,?)", tokenHash, userCode, now() + 600000);
+    },
+    device(tokenHash) {
+      const link = one("SELECT * FROM device_links WHERE token_hash=? AND expires>?", tokenHash, now());
+      requireThat(link, "device_expired", "Connection expired. Start again from S2T.", 410);
+      return link;
+    },
+    approveDevice(account, userCode, deriveKey) {
+      return tx(() => {
+        accountExists(account);
+        requireThat(!one("SELECT frozen FROM accounts WHERE id=?", account).frozen, "frozen", "Account is frozen.");
+        const link = one("SELECT * FROM device_links WHERE user_code=? AND expires>?", userCode, now());
+        requireThat(link, "device_expired", "Connection expired. Start again from S2T.", 410);
+        if (link.account) {
+          requireThat(link.account === account, "device_used", "This connection has already been approved by another account.", 409);
+          return;
+        }
+        requireThat(one("SELECT count(*) AS n FROM api_keys WHERE account=? AND revoked=0 AND expires>?", account, now()).n < 10, "keys", "Revoke an old app key before connecting another app.");
+        const key = deriveKey(link.token_hash), id = randomUUID();
+        run("INSERT INTO api_keys VALUES(?,?,?,?,0,?)", id, hash(key), account, key.slice(-6), now() + 90 * 86400000);
+        run("UPDATE device_links SET account=?, key_id=? WHERE token_hash=?", account, id, link.token_hash);
+        audit("device_connected", id);
+      });
+    },
     issueKey(account) {
       return tx(() => {
         accountExists(account);
@@ -168,7 +195,6 @@ export function openLedger(
           "frozen",
           "Account is frozen.",
         );
-        requireThat(balance(account) > 0, "balance", "Add credits before creating a key.");
         requireThat(
           one("SELECT count(*) AS n FROM api_keys WHERE account=? AND revoked=0", account).n < 10,
           "keys",
@@ -205,6 +231,35 @@ export function openLedger(
         );
         audit("key_revoked", id);
       });
+    },
+    checkoutOrder(account, cents, dedup) {
+      integer(cents, 100, 10000, "Top-up");
+      requireThat(typeof dedup === "string" && /^[A-Za-z0-9_-]{16,128}$/.test(dedup), "idempotency", "Provide a stable purchase identifier.");
+      return tx(() => {
+        accountExists(account);
+        requireThat(!one("SELECT frozen FROM accounts WHERE id=?", account).frozen, "frozen", "Account is frozen.");
+        const existing = one("SELECT * FROM checkout_orders WHERE account=? AND dedup=?", account, dedup);
+        if (existing) {
+          requireThat(existing.cents === cents, "checkout_conflict", "Purchase amount changed. Start a new checkout.");
+          requireThat(existing.session || existing.created > now() - 23 * 3600000, "checkout_expired", "This checkout attempt expired. Reload and start a new purchase.");
+          return existing;
+        }
+        const id = randomUUID();
+        run("INSERT INTO checkout_orders(id,account,dedup,cents,created) VALUES(?,?,?,?,?)", id, account, dedup, cents, now());
+        return one("SELECT * FROM checkout_orders WHERE id=?", id);
+      });
+    },
+    attachCheckout(id, session, url = null) {
+      return tx(() => {
+        const order = one("SELECT * FROM checkout_orders WHERE id=?", id);
+        requireThat(order && (!order.session || order.session === session), "checkout_conflict", "Checkout session changed.");
+        run("UPDATE checkout_orders SET session=?, url=COALESCE(?,url) WHERE id=?", session, url, id);
+      });
+    },
+    verifyCheckout(id, account, cents, session) {
+      const order = one("SELECT * FROM checkout_orders WHERE id=?", id);
+      requireThat(order && order.account === account && order.cents === cents && (!order.session || order.session === session), "checkout_order", "Payment does not match an S2T purchase.");
+      this.attachCheckout(id, session);
     },
     grant({ account, cents, session, intent }) {
       fundedMicros(cents);

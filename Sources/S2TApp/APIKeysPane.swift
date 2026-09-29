@@ -1,122 +1,198 @@
 import AppKit
-import Combine
+import SwiftUI
 import S2TCore
 
 @MainActor final class APIKeysPane: NSViewController {
-    let state: AppState
-    private(set) var editors: [String: MenuValueEditor] = [:]
-    let unlockButton = SettingsGlassButton(title: "Unlock saved keys…", target: nil, action: nil)
-    private var subscription: AnyCancellable?
-
+    static let accounts: [APIAccount] = [.openRouter, .xai, .assemblyAI, .typeSafe]
+    let editing: APIKeyEditing
     init(state: AppState) {
-        self.state = state
+        editing = APIKeyEditing(state: state)
         super.init(nibName: nil, bundle: nil)
-        subscription = state.objectWillChange.sink { [weak self] in
-            DispatchQueue.main.async { [weak self] in self?.refresh() }
-        }
     }
     required init?(coder: NSCoder) { nil }
-
     override func loadView() {
-        let scroll = SettingsGlassScrollView(frame: .zero)
-        scroll.hasVerticalScroller = true
-        scroll.automaticallyAdjustsContentInsets = false
-        scroll.drawsBackground = true
-        view = scroll
-        let stack = SettingsDocumentStack()
-        stack.orientation = .vertical
-        stack.alignment = .leading
-        stack.spacing = 14
-        stack.edgeInsets = NSEdgeInsets(top: 20, left: 24, bottom: 20, right: 24)
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        scroll.documentView = stack
-        stack.widthAnchor.constraint(equalTo: scroll.contentView.widthAnchor).isActive = true
-        let heading = SettingsFormStyle.pageHeading("API keys")
-        stack.addArrangedSubview(heading)
-        heading.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -48).isActive = true
-        let note = NSTextField(wrappingLabelWithString: "Connect the services you use. Your keys stay in macOS Keychain.")
-        note.font = .systemFont(ofSize: 12)
-        note.textColor = .secondaryLabelColor
-        stack.addArrangedSubview(note)
-        note.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -48).isActive = true
-        unlockButton.target = self
-        unlockButton.action = #selector(unlock)
-        stack.addArrangedSubview(unlockButton)
-        for account in APIAccount.allCases {
-            let id = account.rawValue
-            let card = SettingsGroup()
-            card.identifier = NSUserInterfaceItemIdentifier("keys.group." + id)
-            stack.addArrangedSubview(card)
-            card.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -48).isActive = true
-            let colors: [String: NSColor] = ["assemblyai": .systemBlue, "openrouter": .systemPurple, "cerebras": .systemOrange, "elevenlabs": .systemGray]
-            let getKey = SettingsGlassButton(title: "Get API key", target: self, action: #selector(getAPIKey(_:)))
-            getKey.identifier = NSUserInterfaceItemIdentifier(id)
-            let title = SettingsHeading.make(account.title, symbol: id == "openrouter" ? "point.3.connected.trianglepath.dotted" : "waveform", color: colors[id] ?? .systemBlue)
-            let header = NSStackView(views: [title, getKey])
-            header.alignment = .centerY
-            header.distribution = .fill
-            header.spacing = 8
-            card.add(header)
-            let description = NSTextField(wrappingLabelWithString: id == "openrouter" ? "One key for speech to text, cleanup and Prompt vision." : id == "cerebras" ? "Text cleanup" : "Speech to text")
-            description.font = .systemFont(ofSize: 12)
-            description.textColor = .secondaryLabelColor
-            card.add(description)
-            let editor = MenuValueEditor(title: "API key", value: state.keyValue(id), secure: true,
-                saved: state.savedKeyAccounts.contains(id), onPaste: { [weak self] value in
-                    self?.setKey(value, account: id)
-                }, onSave: { [weak self] value in
-                    guard let self else { return "Settings closed." }
-                    self.setKey(value, account: id)
-                    self.state.saveAPIKey(account: id)
-                    self.refresh()
-                    return self.state.savedKeyAccounts.contains(id) ? nil : self.state.keyStatuses[id]?.message ?? "Could not save the key."
-                })
-            editor.identifier = NSUserInterfaceItemIdentifier("editor." + id)
-            editor.useSettingsStyle()
-            card.add(editor)
-            editors[id] = editor
-
-        }
-        refresh()
+        let host = NSHostingView(rootView: APIKeysView(state: editing.state, editing: editing))
+        host.sizingOptions = []
+        view = host
     }
+    func refresh() { if !editing.enabled { editing.endEditing() } }
+}
 
-    func setKey(_ value: String, account: String) {
-        guard state.keyValue(account) != value else { return }
-        switch account {
-        case "assemblyai": state.assemblyKey = value
-        case "openrouter": state.routerKey = value
-        case "cerebras": state.cerebrasKey = value
-        case "elevenlabs": state.elevenLabsKey = value
+@MainActor final class APIKeyEditing: ObservableObject {
+    let state: AppState
+    @Published private(set) var drafts: [String: String] = [:]
+    @Published private(set) var account: String?
+    @Published private(set) var pasteNotice: String?
+    var layout: [String: CGRect] = [:]
+
+    init(state: AppState) { self.state = state }
+    var enabled: Bool { !state.savedKeysLocked }
+    func value(_ id: String) -> String { drafts[id] ?? state.keyValue(id) }
+    func beginEditing(_ id: String) { if enabled { if account != id { endEditing() }; account = id } }
+    func endEditing(commit: Bool = true) {
+        let previous = account
+        account = nil
+        if commit, let previous { save(previous) }
+    }
+    func change(_ value: String, for id: String) {
+        guard enabled else { return }
+        drafts[id] = value
+        pasteNotice = nil
+    }
+    func paste(_ value: String?, for id: String) {
+        guard enabled else { return }
+        guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else {
+            pasteNotice = id
+            return
+        }
+        change(value, for: id)
+    }
+    func status(_ id: String) -> APIKeyStatus? { drafts[id] == nil ? state.keyStatuses[id] : nil }
+    func saved(_ id: String) -> Bool { drafts[id] == nil && state.savedKeyAccounts.contains(id) }
+    func canSave(_ id: String) -> Bool {
+        let value = value(id).trimmingCharacters(in: .whitespacesAndNewlines)
+        let changed = drafts[id] != nil && value != state.keyValue(id)
+        return enabled && !state.phase.busy && state.phase != .recording &&
+            (changed || !value.isEmpty && (!saved(id) || status(id)?.needsAttention == true)) && status(id) != .checking
+    }
+    func message(_ id: String) -> String {
+        if pasteNotice == id { return "Copy an API key, then click Paste." }
+        if drafts[id] != nil {
+            if state.phase.busy || state.phase == .recording { return "Finish dictation to save this key." }
+            if value(id).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+               let status = state.keyStatuses[id], status.needsAttention { return status.message }
+            return ""
+        }
+        if let status = status(id), status.needsAttention { return status.message }
+        return ""
+    }
+    func save(_ id: String) {
+        guard canSave(id) else { return }
+        endEditing(commit: false)
+        let key = value(id).trimmingCharacters(in: .whitespacesAndNewlines)
+        if key.isEmpty {
+            if state.clearAPIKey(account: id) { drafts[id] = nil }
+            return
+        }
+        switch id {
+        case "artificialanalysis": state.artificialAnalysisKey = key
+        case "assemblyai": state.assemblyKey = key
+        case "xai": state.xaiKey = key
+        case "openrouter": state.routerKey = key
+        case "typesafe": state.typeSafeKey = key
+        case "s2t": state.creditsKey = key
         default: return
         }
+        state.saveAPIKey(account: id)
+        drafts[id] = nil
     }
+}
 
-    func refresh() {
-        guard isViewLoaded else { return }
-        let enabled = !state.phase.busy && state.phase != .recording
-        unlockButton.isHidden = !state.savedKeysLocked && state.clipboardMonitor.persistenceError == nil
-        unlockButton.isEnabled = enabled
-        for (id, editor) in editors {
-            editor.field.stringValue = state.keyValue(id)
-            let status = state.keyStatuses[id]
-            let saved = state.savedKeyAccounts.contains(id)
-            editor.setKeyStatus(status, saved: saved)
-            editor.saveButton.title = status == .checking ? "Checking…" : status?.needsAttention == true ? "Save and retry" : saved ? "✓ Saved" : "Save API key"
-            editor.setEnabled(enabled)
-            editor.saveButton.attributedTitle = NSAttributedString(string: editor.saveButton.title, attributes: [
-                .font: NSFont.systemFont(ofSize: 12, weight: .medium), .foregroundColor: NSColor.white
-            ])
+private struct KeyLayout: PreferenceKey {
+    static let defaultValue: [String: CGRect] = [:]
+    static func reduce(value: inout [String: CGRect], nextValue: () -> [String: CGRect]) { value.merge(nextValue(), uniquingKeysWith: { _, new in new }) }
+}
+
+private extension View {
+    func keyLayout(_ id: String) -> some View {
+        background(GeometryReader { proxy in
+            Color.clear.preference(key: KeyLayout.self, value: [id: proxy.frame(in: .named("apiKeys"))])
+        })
+    }
+}
+
+struct APIKeysView: View {
+    @ObservedObject var state: AppState
+    @ObservedObject var editing: APIKeyEditing
+
+    var body: some View {
+        Form {
+            if state.isProviderVisible("s2t") {
+                Section("S2T credits") {
+                    APIKeyRow(id: "s2t", title: "S2T key", state: state, editing: editing)
+                }
+            }
+            Section("Personal API keys") {
+                ForEach(APIKeysPane.accounts.filter { state.isProviderVisible($0.rawValue) }, id: \.rawValue) { provider in
+                    APIKeyRow(id: provider.rawValue, title: provider.title, state: state, editing: editing)
+                }
+            }
+            if state.savedKeysLocked || state.clipboardMonitor.persistenceError != nil {
+                Section {
+                    Button("Unlock saved keys…") { state.loadSavedKeys(allowInteraction: true) }
+                }
+            }
         }
+        .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
+        .contentMargins(.horizontal, 24, for: .scrollContent)
+        .background(.background)
+        .nativeGlassButtons()
+        .coordinateSpace(name: "apiKeys")
+        .onPreferenceChange(KeyLayout.self) { editing.layout = $0 }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didResignKeyNotification)) { _ in editing.endEditing() }
+        .onChange(of: editing.enabled) { _, enabled in if !enabled { editing.endEditing() } }
+        .onDisappear { editing.endEditing() }
+        .task { await state.refreshCredits() }
     }
-    @objc private func getAPIKey(_ sender: NSButton) {
-        let addresses = [
-            "assemblyai": "https://www.assemblyai.com/dashboard/signup",
-            "openrouter": "https://openrouter.ai/settings/keys",
-            "cerebras": "https://cloud.cerebras.ai/platform/",
-            "elevenlabs": "https://elevenlabs.io/app/settings/api-keys"
-        ]
-        guard let id = sender.identifier?.rawValue, let address = addresses[id], let url = URL(string: address) else { return }
-        NSWorkspace.shared.open(url)
+}
+
+private struct APIKeyRow: View {
+    let id: String
+    let title: String
+    @ObservedObject var state: AppState
+    @ObservedObject var editing: APIKeyEditing
+    @FocusState private var focused: Bool
+    private var revealed: Bool { editing.account == id }
+    private var value: Binding<String> { Binding(get: { editing.value(id) }, set: { editing.change($0, for: id) }) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Text(title).fontWeight(.medium)
+                    .fixedSize(horizontal: true, vertical: false)
+                    .keyLayout("title." + id)
+                Spacer(minLength: 0)
+                SecureField("\(title) API key", text: value, prompt: Text("Add key"))
+                    .labelsHidden()
+                    .textFieldStyle(.roundedBorder)
+                    .focused($focused)
+                    .onSubmit { editing.save(id); focused = false }
+                    .onExitCommand { editing.endEditing(commit: false); focused = false }
+                    .help("Saved when you press Return or leave the field. Empty the field to remove this key.")
+                    .frame(minWidth: 160, maxWidth: 320)
+                    .accessibilityLabel("\(title) API key")
+                    .accessibilityIdentifier("keys.field.\(id)")
+                    .keyLayout("field.\(id)")
+                if editing.status(id) == .checking {
+                    ProgressView().controlSize(.small).accessibilityLabel("Checking \(title) key")
+                }
+            }
+            .frame(minHeight: 28)
+            .disabled(!editing.enabled)
+            if !editing.message(id).isEmpty {
+                Text(editing.message(id))
+                    .font(.callout)
+                    .foregroundStyle(editing.status(id)?.needsAttention == true ? Color.red : Color.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .keyLayout("status.\(id)")
+            }
+            if id == "typesafe" && editing.value(id).isEmpty {
+                HStack(spacing: 8) {
+                    Text("Used for Jev cleanup decisions.")
+                        .foregroundStyle(.secondary)
+                    Link("Get a TypeSafe key", destination: URL(string: "https://console.typesafe.ai/")!)
+                }
+                .font(.caption)
+            }
+        }
+        .keyLayout("row." + id)
+        .onChange(of: focused) { _, focused in
+            if focused { editing.beginEditing(id) }
+            else if revealed { editing.endEditing() }
+        }
+        .onChange(of: revealed) { _, revealed in focused = revealed }
+        .onAppear { focused = revealed }
     }
-    @objc private func unlock() { state.loadSavedKeys(allowInteraction: true); refresh() }
 }

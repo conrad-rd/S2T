@@ -1,0 +1,86 @@
+[
+  {
+    "id": "meta/muse-voice-transcribe-1.0",
+    "name": "Meta: Muse Voice Transcribe 1.0"
+  },
+  {
+    "id": "microsoft/mai-transcribe-2",
+    "name": "Microsoft AI: MAI-Transcribe 2"
+  },
+  {
+    "id": "nvidia/nemotron-3.5-asr-streaming-multilingual-0.6b",
+    "name": "NVIDIA: Nemotron 3.5 ASR Streaming Multilingual 0.6B"
+  },
+  {
+    "id": "mistralai/voxtral-small-24b-2507-stt",
+    "name": "Mistral: Voxtral Small 24B 2507 STT"
+  },
+  {
+    "id": "mistralai/voxtral-mini-3b-2507",
+    "name": "Mistral: Voxtral Mini 3B 2507"
+  },
+  {
+    "id": "qwen/qwen3-asr-1.7b",
+    "name": "Qwen: Qwen3 ASR 1.7B"
+  },
+  {
+    "id": "qwen/qwen3-asr-0.6b",
+    "name": "Qwen: Qwen3 ASR 0.6B"
+  },
+  {
+    "id": "openai/gpt-transcribe",
+    "name": "OpenAI: GPT Transcribe"
+  },
+  {
+    "id": "fish-audio/transcribe-1",
+    "name": "Fish Audio: Transcribe 1"
+  },
+  {
+    "id": "x-ai/grok-stt-1.0",
+    "name": "SpaceXAI: Grok STT 1.0"
+  },
+  {
+    "id": "deepgram/nova-3",
+    "name": "Deepgram: Nova-3"
+  },
+  {
+    "id": "microsoft/mai-transcribe-1.5",
+    "name": "Microsoft AI: MAI-Transcribe 1.5"
+  },
+  {
+    "id": "nvidia/parakeet-tdt-0.6b-v3",
+    "name": "NVIDIA: Parakeet TDT 0.6B v3"
+  },
+  {
+    "id": "mistralai/voxtral-mini-transcribe",
+    "name": "Mistral: Voxtral Mini Transcribe"
+  },
+  {
+    "id": "qwen/qwen3-asr-flash-2026-02-10",
+    "name": "Qwen: Qwen3 ASR Flash"
+  },
+  {
+    "id": "google/chirp-3",
+    "name": "Google: Chirp 3"
+  },
+  {
+    "id": "openai/gpt-4o-mini-transcribe",
+    "name": "OpenAI: GPT-4o Mini Transcribe"
+  },
+  {
+    "id": "openai/whisper-large-v3",
+    "name": "OpenAI: Whisper Large V3"
+  },
+  {
+    "id": "openai/whisper-large-v3-turbo",
+    "name": "OpenAI: Whisper Large V3 Turbo"
+  },
+  {
+    "id": "openai/whisper-1",
+    "name": "OpenAI: Whisper 1"
+  },
+  {
+    "id": "openai/gpt-4o-transcribe",
+    "name": "OpenAI: GPT-4o Transcribe"
+  }
+]

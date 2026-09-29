@@ -2,7 +2,7 @@ import Foundation
 import Darwin
 
 public protocol CodexServing: Sendable {
-    func complete(instructions: String, prompt: String, model: String, images: [Data], executable: String, options: CodexOptions) async throws -> String
+    func complete(instructions: String, prompt: String, model: String, executable: String, options: CodexOptions) async throws -> String
 }
 
 public struct CodexCLI: CodexServing {
@@ -31,14 +31,12 @@ public struct CodexCLI: CodexServing {
         return url
     }
 
-    public func complete(instructions: String, prompt: String, model: String, images: [Data] = [], executable: String = "", options: CodexOptions = CodexOptions()) async throws -> String {
+    public func complete(instructions: String, prompt: String, model: String, executable: String = "", options: CodexOptions = CodexOptions()) async throws -> String {
         try Task.checkCancellation()
         guard let binary = Self.executableURL(executable) else {
             throw ServiceError.message("Codex CLI was not found. Install Codex, run codex login, then set its executable path in S2T's Codex settings if needed.")
         }
-        guard options.isValid, ProcessingProvider.codex.validModelID(model), images.count <= 64,
-              images.reduce(0, { $0 + $1.count }) <= 128_000_000,
-              images.allSatisfy({ $0.count <= 12_000_000 }), prompt.utf8.count <= 1_000_000 else {
+        guard options.isValid, ProcessingProvider.codex.validModelID(model), prompt.utf8.count <= 1_000_000 else {
             throw ServiceError.message("The Codex model or input is invalid or too large.")
         }
         let files = FileManager.default
@@ -69,11 +67,6 @@ public struct CodexCLI: CodexServing {
         arguments += ["-c", "features.skip_host_skill_discovery=true"]
         if model != "default" { arguments += ["--model", model] }
         arguments += options.arguments
-        for (index, image) in images.enumerated() {
-            let url = directory.appendingPathComponent("reference-\(index + 1).png")
-            try image.write(to: url, options: .atomic)
-            arguments += ["--image", url.path]
-        }
         arguments += ["--", "-"]
         process.arguments = arguments
         process.standardInput = inputHandle
@@ -87,7 +80,7 @@ public struct CodexCLI: CodexServing {
         while process.isRunning {
             try Task.checkCancellation()
             guard ProcessInfo.processInfo.systemUptime < deadline else {
-                throw ServiceError.message("Codex timed out. Your original dictation and reference images are preserved.")
+                throw ServiceError.message("Codex timed out. Your original dictation is preserved.")
             }
             try await Task.sleep(nanoseconds: 50_000_000)
         }
@@ -97,7 +90,7 @@ public struct CodexCLI: CodexServing {
         }
         guard let size = try? output.resourceValues(forKeys: [.fileSizeKey]).fileSize, size <= 1_000_000,
               let result = try? String(contentsOf: output, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines), !result.isEmpty else {
-            throw ServiceError.message("Codex returned an empty or unreadable result. Your original dictation and reference images are preserved.")
+            throw ServiceError.message("Codex returned an empty or unreadable result. Your original dictation is preserved.")
         }
         return result
     }

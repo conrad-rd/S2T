@@ -31,9 +31,9 @@ test("SIGKILL at reservation, submission and settlement preserves the right bala
       r.state,
       stage === "reserved" ? "released" : stage === "submitted" ? "uncertain" : "settled",
     );
-    assert.equal(summary.balance, stage === "settled" ? 99.99 : 100);
-    assert.equal(summary.reserved, stage === "submitted" ? 1000 / 9000 : 0);
-    assert.equal(summary.paused, stage === "submitted");
+    assert.equal(summary.balance, stage === "settled" ? 99.982 : 100);
+    assert.equal(summary.reserved, stage === "submitted" ? 1000 / 5000 : 0);
+    assert.equal(summary.paused, false);
     l.unclaim();
     l.close();
   }

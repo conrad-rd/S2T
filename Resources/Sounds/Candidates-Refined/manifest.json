@@ -1,0 +1,722 @@
+[
+  {
+    "family": "glow",
+    "event": "open",
+    "number": 1,
+    "file": "glow/open/01.mp3",
+    "source": "glow/open/01.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon; unfurls upward. Two short low swells followed by a delayed longer slip. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "glow",
+    "event": "open",
+    "number": 2,
+    "file": "glow/open/02.mp3",
+    "source": "glow/open/02.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon; unfurls upward. A delayed first pulse and two overlapping soft swirls, curving slightly lower. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "glow",
+    "event": "open",
+    "number": 3,
+    "file": "glow/open/03.mp3",
+    "source": "glow/open/03.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon; unfurls upward. A delayed first pulse and two overlapping soft swirls, slightly rising. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "glow",
+    "event": "open",
+    "number": 4,
+    "file": "glow/open/04.mp3",
+    "source": "glow/open/04.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon; unfurls upward. Two short low swells followed by a softer, longer delayed slip. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "glow",
+    "event": "open",
+    "number": 5,
+    "file": "glow/open/05.mp3",
+    "source": "glow/open/05.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon; unfurls upward. A delayed first pulse and two close, overlapping swirls with a small downward curl. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "glow",
+    "event": "open",
+    "number": 6,
+    "file": "glow/open/06.mp3",
+    "source": "glow/open/06.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon; unfurls upward. Two low swells close together, then one longer slipping motion after a small pause. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "glow",
+    "event": "open",
+    "number": 7,
+    "file": "glow/open/07.mp3",
+    "source": "glow/open/07.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon; unfurls upward. A delayed first pulse and two overlapping swirls, with the second one softer. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "glow",
+    "event": "open",
+    "number": 8,
+    "file": "glow/open/08.mp3",
+    "source": "glow/open/08.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon; unfurls upward. A short low swell, a quieter second swell, then a delayed fluid slip. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "glow",
+    "event": "open",
+    "number": 9,
+    "file": "glow/open/09.mp3",
+    "source": "glow/open/09.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon; unfurls upward. Two short low swells with a slightly wider gap, followed by a longer slip. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "glow",
+    "event": "open",
+    "number": 10,
+    "file": "glow/open/10.mp3",
+    "source": "glow/open/10.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon; unfurls upward. A soft delayed pulse and two overlapping liquid swirls with a very small rise. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "glow",
+    "event": "processing",
+    "number": 1,
+    "file": "glow/processing/01.mp3",
+    "source": "glow/processing/01.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon; turns in place, unresolved. Two short low swells followed by a delayed longer slip. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "glow",
+    "event": "processing",
+    "number": 2,
+    "file": "glow/processing/02.mp3",
+    "source": "glow/processing/02.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon; turns in place, unresolved. A delayed first pulse and two overlapping soft swirls, curving slightly lower. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "glow",
+    "event": "processing",
+    "number": 3,
+    "file": "glow/processing/03.mp3",
+    "source": "glow/processing/03.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon; turns in place, unresolved. A delayed first pulse and two overlapping soft swirls, slightly rising. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "glow",
+    "event": "processing",
+    "number": 4,
+    "file": "glow/processing/04.mp3",
+    "source": "glow/processing/04.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon; turns in place, unresolved. Two short low swells followed by a softer, longer delayed slip. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "glow",
+    "event": "processing",
+    "number": 5,
+    "file": "glow/processing/05.mp3",
+    "source": "glow/processing/05.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon; turns in place, unresolved. A delayed first pulse and two close, overlapping swirls with a small downward curl. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "glow",
+    "event": "processing",
+    "number": 6,
+    "file": "glow/processing/06.mp3",
+    "source": "glow/processing/06.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon; turns in place, unresolved. Two low swells close together, then one longer slipping motion after a small pause. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "glow",
+    "event": "processing",
+    "number": 7,
+    "file": "glow/processing/07.mp3",
+    "source": "glow/processing/07.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon; turns in place, unresolved. A delayed first pulse and two overlapping swirls, with the second one softer. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "glow",
+    "event": "processing",
+    "number": 8,
+    "file": "glow/processing/08.mp3",
+    "source": "glow/processing/08.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon; turns in place, unresolved. A short low swell, a quieter second swell, then a delayed fluid slip. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "glow",
+    "event": "processing",
+    "number": 9,
+    "file": "glow/processing/09.mp3",
+    "source": "glow/processing/09.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon; turns in place, unresolved. Two short low swells with a slightly wider gap, followed by a longer slip. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "glow",
+    "event": "processing",
+    "number": 10,
+    "file": "glow/processing/10.mp3",
+    "source": "glow/processing/10.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon; turns in place, unresolved. A soft delayed pulse and two overlapping liquid swirls with a very small rise. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "glow",
+    "event": "complete",
+    "number": 1,
+    "file": "glow/complete/01.mp3",
+    "source": "glow/complete/01.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon; curves inward and settles. Two short low swells followed by a delayed longer slip. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "glow",
+    "event": "complete",
+    "number": 2,
+    "file": "glow/complete/02.mp3",
+    "source": "glow/complete/02.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon; curves inward and settles. A delayed first pulse and two overlapping soft swirls, curving slightly lower. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "glow",
+    "event": "complete",
+    "number": 3,
+    "file": "glow/complete/03.mp3",
+    "source": "glow/complete/03.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon; curves inward and settles. A delayed first pulse and two overlapping soft swirls, slightly rising. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "glow",
+    "event": "complete",
+    "number": 4,
+    "file": "glow/complete/04.mp3",
+    "source": "glow/complete/04.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon; curves inward and settles. Two short low swells followed by a softer, longer delayed slip. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "glow",
+    "event": "complete",
+    "number": 5,
+    "file": "glow/complete/05.mp3",
+    "source": "glow/complete/05.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon; curves inward and settles. A delayed first pulse and two close, overlapping swirls with a small downward curl. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "glow",
+    "event": "complete",
+    "number": 6,
+    "file": "glow/complete/06.mp3",
+    "source": "glow/complete/06.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon; curves inward and settles. Two low swells close together, then one longer slipping motion after a small pause. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "glow",
+    "event": "complete",
+    "number": 7,
+    "file": "glow/complete/07.mp3",
+    "source": "glow/complete/07.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon; curves inward and settles. A delayed first pulse and two overlapping swirls, with the second one softer. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "glow",
+    "event": "complete",
+    "number": 8,
+    "file": "glow/complete/08.mp3",
+    "source": "glow/complete/08.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon; curves inward and settles. A short low swell, a quieter second swell, then a delayed fluid slip. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "glow",
+    "event": "complete",
+    "number": 9,
+    "file": "glow/complete/09.mp3",
+    "source": "glow/complete/09.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon; curves inward and settles. Two short low swells with a slightly wider gap, followed by a longer slip. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "glow",
+    "event": "complete",
+    "number": 10,
+    "file": "glow/complete/10.mp3",
+    "source": "glow/complete/10.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon; curves inward and settles. A soft delayed pulse and two overlapping liquid swirls with a very small rise. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "input",
+    "event": "open",
+    "number": 1,
+    "file": "input/open/01.mp3",
+    "source": "input/open/01.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon, nearer and narrower; unfurls upward. Two short low swells followed by a delayed longer slip. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "input",
+    "event": "open",
+    "number": 2,
+    "file": "input/open/02.mp3",
+    "source": "input/open/02.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon, nearer and narrower; unfurls upward. A delayed first pulse and two overlapping soft swirls, curving slightly lower. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "input",
+    "event": "open",
+    "number": 3,
+    "file": "input/open/03.mp3",
+    "source": "input/open/03.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon, nearer and narrower; unfurls upward. A delayed first pulse and two overlapping soft swirls, slightly rising. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "input",
+    "event": "open",
+    "number": 4,
+    "file": "input/open/04.mp3",
+    "source": "input/open/04.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon, nearer and narrower; unfurls upward. Two short low swells followed by a softer, longer delayed slip. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "input",
+    "event": "open",
+    "number": 5,
+    "file": "input/open/05.mp3",
+    "source": "input/open/05.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon, nearer and narrower; unfurls upward. A delayed first pulse and two close, overlapping swirls with a small downward curl. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "input",
+    "event": "open",
+    "number": 6,
+    "file": "input/open/06.mp3",
+    "source": "input/open/06.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon, nearer and narrower; unfurls upward. Two low swells close together, then one longer slipping motion after a small pause. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "input",
+    "event": "open",
+    "number": 7,
+    "file": "input/open/07.mp3",
+    "source": "input/open/07.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon, nearer and narrower; unfurls upward. A delayed first pulse and two overlapping swirls, with the second one softer. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "input",
+    "event": "open",
+    "number": 8,
+    "file": "input/open/08.mp3",
+    "source": "input/open/08.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon, nearer and narrower; unfurls upward. A short low swell, a quieter second swell, then a delayed fluid slip. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "input",
+    "event": "open",
+    "number": 9,
+    "file": "input/open/09.mp3",
+    "source": "input/open/09.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon, nearer and narrower; unfurls upward. Two short low swells with a slightly wider gap, followed by a longer slip. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "input",
+    "event": "open",
+    "number": 10,
+    "file": "input/open/10.mp3",
+    "source": "input/open/10.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon, nearer and narrower; unfurls upward. A soft delayed pulse and two overlapping liquid swirls with a very small rise. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "input",
+    "event": "processing",
+    "number": 1,
+    "file": "input/processing/01.mp3",
+    "source": "input/processing/01.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon, nearer and narrower; turns in place, unresolved. Two short low swells followed by a delayed longer slip. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "input",
+    "event": "processing",
+    "number": 2,
+    "file": "input/processing/02.mp3",
+    "source": "input/processing/02.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon, nearer and narrower; turns in place, unresolved. A delayed first pulse and two overlapping soft swirls, curving slightly lower. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "input",
+    "event": "processing",
+    "number": 3,
+    "file": "input/processing/03.mp3",
+    "source": "input/processing/03.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon, nearer and narrower; turns in place, unresolved. A delayed first pulse and two overlapping soft swirls, slightly rising. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "input",
+    "event": "processing",
+    "number": 4,
+    "file": "input/processing/04.mp3",
+    "source": "input/processing/04.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon, nearer and narrower; turns in place, unresolved. Two short low swells followed by a softer, longer delayed slip. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "input",
+    "event": "processing",
+    "number": 5,
+    "file": "input/processing/05.mp3",
+    "source": "input/processing/05.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon, nearer and narrower; turns in place, unresolved. A delayed first pulse and two close, overlapping swirls with a small downward curl. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "input",
+    "event": "processing",
+    "number": 6,
+    "file": "input/processing/06.mp3",
+    "source": "input/processing/06.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon, nearer and narrower; turns in place, unresolved. Two low swells close together, then one longer slipping motion after a small pause. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "input",
+    "event": "processing",
+    "number": 7,
+    "file": "input/processing/07.mp3",
+    "source": "input/processing/07.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon, nearer and narrower; turns in place, unresolved. A delayed first pulse and two overlapping swirls, with the second one softer. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "input",
+    "event": "processing",
+    "number": 8,
+    "file": "input/processing/08.mp3",
+    "source": "input/processing/08.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon, nearer and narrower; turns in place, unresolved. A short low swell, a quieter second swell, then a delayed fluid slip. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "input",
+    "event": "processing",
+    "number": 9,
+    "file": "input/processing/09.mp3",
+    "source": "input/processing/09.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon, nearer and narrower; turns in place, unresolved. Two short low swells with a slightly wider gap, followed by a longer slip. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "input",
+    "event": "processing",
+    "number": 10,
+    "file": "input/processing/10.mp3",
+    "source": "input/processing/10.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon, nearer and narrower; turns in place, unresolved. A soft delayed pulse and two overlapping liquid swirls with a very small rise. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "input",
+    "event": "complete",
+    "number": 1,
+    "file": "input/complete/01.mp3",
+    "source": "input/complete/01.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon, nearer and narrower; curves inward and settles. Two short low swells followed by a delayed longer slip. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "input",
+    "event": "complete",
+    "number": 2,
+    "file": "input/complete/02.mp3",
+    "source": "input/complete/02.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon, nearer and narrower; curves inward and settles. A delayed first pulse and two overlapping soft swirls, curving slightly lower. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "input",
+    "event": "complete",
+    "number": 3,
+    "file": "input/complete/03.mp3",
+    "source": "input/complete/03.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon, nearer and narrower; curves inward and settles. A delayed first pulse and two overlapping soft swirls, slightly rising. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "input",
+    "event": "complete",
+    "number": 4,
+    "file": "input/complete/04.mp3",
+    "source": "input/complete/04.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon, nearer and narrower; curves inward and settles. Two short low swells followed by a softer, longer delayed slip. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "input",
+    "event": "complete",
+    "number": 5,
+    "file": "input/complete/05.mp3",
+    "source": "input/complete/05.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon, nearer and narrower; curves inward and settles. A delayed first pulse and two close, overlapping swirls with a small downward curl. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "input",
+    "event": "complete",
+    "number": 6,
+    "file": "input/complete/06.mp3",
+    "source": "input/complete/06.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon, nearer and narrower; curves inward and settles. Two low swells close together, then one longer slipping motion after a small pause. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "input",
+    "event": "complete",
+    "number": 7,
+    "file": "input/complete/07.mp3",
+    "source": "input/complete/07.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon, nearer and narrower; curves inward and settles. A delayed first pulse and two overlapping swirls, with the second one softer. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "input",
+    "event": "complete",
+    "number": 8,
+    "file": "input/complete/08.mp3",
+    "source": "input/complete/08.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon, nearer and narrower; curves inward and settles. A short low swell, a quieter second swell, then a delayed fluid slip. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "input",
+    "event": "complete",
+    "number": 9,
+    "file": "input/complete/09.mp3",
+    "source": "input/complete/09.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon, nearer and narrower; curves inward and settles. Two short low swells with a slightly wider gap, followed by a longer slip. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "input",
+    "event": "complete",
+    "number": 10,
+    "file": "input/complete/10.mp3",
+    "source": "input/complete/10.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon, nearer and narrower; curves inward and settles. A soft delayed pulse and two overlapping liquid swirls with a very small rise. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "classic",
+    "event": "open",
+    "number": 1,
+    "file": "classic/open/01.mp3",
+    "source": "classic/open/01.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon, slightly rounder and darker; unfurls upward. Two short low swells followed by a delayed longer slip. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "classic",
+    "event": "open",
+    "number": 2,
+    "file": "classic/open/02.mp3",
+    "source": "classic/open/02.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon, slightly rounder and darker; unfurls upward. A delayed first pulse and two overlapping soft swirls, curving slightly lower. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "classic",
+    "event": "open",
+    "number": 3,
+    "file": "classic/open/03.mp3",
+    "source": "classic/open/03.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon, slightly rounder and darker; unfurls upward. A delayed first pulse and two overlapping soft swirls, slightly rising. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "classic",
+    "event": "open",
+    "number": 4,
+    "file": "classic/open/04.mp3",
+    "source": "classic/open/04.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon, slightly rounder and darker; unfurls upward. Two short low swells followed by a softer, longer delayed slip. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "classic",
+    "event": "open",
+    "number": 5,
+    "file": "classic/open/05.mp3",
+    "source": "classic/open/05.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon, slightly rounder and darker; unfurls upward. A delayed first pulse and two close, overlapping swirls with a small downward curl. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "classic",
+    "event": "open",
+    "number": 6,
+    "file": "classic/open/06.mp3",
+    "source": "classic/open/06.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon, slightly rounder and darker; unfurls upward. Two low swells close together, then one longer slipping motion after a small pause. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "classic",
+    "event": "open",
+    "number": 7,
+    "file": "classic/open/07.mp3",
+    "source": "classic/open/07.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon, slightly rounder and darker; unfurls upward. A delayed first pulse and two overlapping swirls, with the second one softer. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "classic",
+    "event": "open",
+    "number": 8,
+    "file": "classic/open/08.mp3",
+    "source": "classic/open/08.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon, slightly rounder and darker; unfurls upward. A short low swell, a quieter second swell, then a delayed fluid slip. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "classic",
+    "event": "open",
+    "number": 9,
+    "file": "classic/open/09.mp3",
+    "source": "classic/open/09.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon, slightly rounder and darker; unfurls upward. Two short low swells with a slightly wider gap, followed by a longer slip. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "classic",
+    "event": "open",
+    "number": 10,
+    "file": "classic/open/10.mp3",
+    "source": "classic/open/10.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon, slightly rounder and darker; unfurls upward. A soft delayed pulse and two overlapping liquid swirls with a very small rise. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "classic",
+    "event": "processing",
+    "number": 1,
+    "file": "classic/processing/01.mp3",
+    "source": "classic/processing/01.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon, slightly rounder and darker; turns in place, unresolved. Two short low swells followed by a delayed longer slip. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "classic",
+    "event": "processing",
+    "number": 2,
+    "file": "classic/processing/02.mp3",
+    "source": "classic/processing/02.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon, slightly rounder and darker; turns in place, unresolved. A delayed first pulse and two overlapping soft swirls, curving slightly lower. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "classic",
+    "event": "processing",
+    "number": 3,
+    "file": "classic/processing/03.mp3",
+    "source": "classic/processing/03.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon, slightly rounder and darker; turns in place, unresolved. A delayed first pulse and two overlapping soft swirls, slightly rising. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "classic",
+    "event": "processing",
+    "number": 4,
+    "file": "classic/processing/04.mp3",
+    "source": "classic/processing/04.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon, slightly rounder and darker; turns in place, unresolved. Two short low swells followed by a softer, longer delayed slip. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "classic",
+    "event": "processing",
+    "number": 5,
+    "file": "classic/processing/05.mp3",
+    "source": "classic/processing/05.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon, slightly rounder and darker; turns in place, unresolved. A delayed first pulse and two close, overlapping swirls with a small downward curl. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "classic",
+    "event": "processing",
+    "number": 6,
+    "file": "classic/processing/06.mp3",
+    "source": "classic/processing/06.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon, slightly rounder and darker; turns in place, unresolved. Two low swells close together, then one longer slipping motion after a small pause. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "classic",
+    "event": "processing",
+    "number": 7,
+    "file": "classic/processing/07.mp3",
+    "source": "classic/processing/07.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon, slightly rounder and darker; turns in place, unresolved. A delayed first pulse and two overlapping swirls, with the second one softer. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "classic",
+    "event": "processing",
+    "number": 8,
+    "file": "classic/processing/08.mp3",
+    "source": "classic/processing/08.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon, slightly rounder and darker; turns in place, unresolved. A short low swell, a quieter second swell, then a delayed fluid slip. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "classic",
+    "event": "processing",
+    "number": 9,
+    "file": "classic/processing/09.mp3",
+    "source": "classic/processing/09.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon, slightly rounder and darker; turns in place, unresolved. Two short low swells with a slightly wider gap, followed by a longer slip. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "classic",
+    "event": "processing",
+    "number": 10,
+    "file": "classic/processing/10.mp3",
+    "source": "classic/processing/10.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon, slightly rounder and darker; turns in place, unresolved. A soft delayed pulse and two overlapping liquid swirls with a very small rise. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "classic",
+    "event": "complete",
+    "number": 1,
+    "file": "classic/complete/01.mp3",
+    "source": "classic/complete/01.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon, slightly rounder and darker; curves inward and settles. Two short low swells followed by a delayed longer slip. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "classic",
+    "event": "complete",
+    "number": 2,
+    "file": "classic/complete/02.mp3",
+    "source": "classic/complete/02.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon, slightly rounder and darker; curves inward and settles. A delayed first pulse and two overlapping soft swirls, curving slightly lower. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "classic",
+    "event": "complete",
+    "number": 3,
+    "file": "classic/complete/03.mp3",
+    "source": "classic/complete/03.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon, slightly rounder and darker; curves inward and settles. A delayed first pulse and two overlapping soft swirls, slightly rising. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "classic",
+    "event": "complete",
+    "number": 4,
+    "file": "classic/complete/04.mp3",
+    "source": "classic/complete/04.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon, slightly rounder and darker; curves inward and settles. Two short low swells followed by a softer, longer delayed slip. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "classic",
+    "event": "complete",
+    "number": 5,
+    "file": "classic/complete/05.mp3",
+    "source": "classic/complete/05.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon, slightly rounder and darker; curves inward and settles. A delayed first pulse and two close, overlapping swirls with a small downward curl. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "classic",
+    "event": "complete",
+    "number": 6,
+    "file": "classic/complete/06.mp3",
+    "source": "classic/complete/06.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon, slightly rounder and darker; curves inward and settles. Two low swells close together, then one longer slipping motion after a small pause. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "classic",
+    "event": "complete",
+    "number": 7,
+    "file": "classic/complete/07.mp3",
+    "source": "classic/complete/07.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon, slightly rounder and darker; curves inward and settles. A delayed first pulse and two overlapping swirls, with the second one softer. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "classic",
+    "event": "complete",
+    "number": 8,
+    "file": "classic/complete/08.mp3",
+    "source": "classic/complete/08.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon, slightly rounder and darker; curves inward and settles. A short low swell, a quieter second swell, then a delayed fluid slip. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "classic",
+    "event": "complete",
+    "number": 9,
+    "file": "classic/complete/09.mp3",
+    "source": "classic/complete/09.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon, slightly rounder and darker; curves inward and settles. Two short low swells with a slightly wider gap, followed by a longer slip. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  },
+  {
+    "family": "classic",
+    "event": "complete",
+    "number": 10,
+    "file": "classic/complete/10.mp3",
+    "source": "classic/complete/10.source.mp3",
+    "prompt": "Soft synthetic liquid UI sound: wide hazy fluid ribbon, slightly rounder and darker; curves inward and settles. A soft delayed pulse and two overlapping liquid swirls with a very small rise. A fluid filament makes two or three uneven micro-surges, a small serpentine pitch bend, and faint friction beneath a rounded hollow tone. Very damp, quiet, close and dry. No beep, chime, melody, splash, hard click, sharp hiss, voice, music or reverb."
+  }
+]

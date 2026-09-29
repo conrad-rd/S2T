@@ -24,15 +24,78 @@ enum DictationPhase: Equatable {
         }
     }
     var busy: Bool { [.preparing, .transcribing, .processing].contains(self) }
+    var processingAudio: Bool { self == .transcribing || self == .processing }
 }
 
 @MainActor final class AppState: ObservableObject {
+    let recentRecordings: RecentRecordings
+    var recentRecordingID = UUID()
+    let localUsage: LocalUsageLedger
+    func usageTransport(credits: Bool = false) -> LocalUsageTransport {
+        LocalUsageTransport(base: credits ? CreditTransport() : SessionTransport(), ledger: localUsage, credits: credits)
+    }
+    lazy var meetings = MeetingRecorder(directory: isPreview ? FileManager.default.temporaryDirectory.appendingPathComponent("S2T-meeting-preview-" + UUID().uuidString) : nil, defaults: preferences, transcriber: MeetingTranscriber(transport: usageTransport()), processingAPI: DictationAPI(transport: usageTransport()))
+    @Published private(set) var meetingRecordingActive = false
+    func reserveMeetingRecording() throws {
+        guard !meetingRecordingActive, !writingPromptDictationActive, !phase.busy, phase != .recording, phase != .monitoring else {
+            throw ServiceError.message("Finish the current recording before starting a meeting.")
+        }
+        guard !needsInstallation else { throw ServiceError.message(setupSummary) }
+        meetingRecordingActive = true
+    }
+    func releaseMeetingRecording() { meetingRecordingActive = false }
+
+    @Published var speechUsesCredits = false { didSet { preferences.set(speechUsesCredits, forKey: "speechUsesCredits") } }
+    @Published var earlyTranscriptionEnabled = true { didSet { preferences.set(earlyTranscriptionEnabled, forKey: "earlyTranscriptionEnabled") } }
+    @Published var cleanupUsesCredits = false { didSet { preferences.set(cleanupUsesCredits, forKey: "cleanupUsesCredits") } }
+    @Published var creditsAddress = Bundle.main.object(forInfoDictionaryKey: "S2TCreditsURL") as? String ?? ""
+    @Published var creditsKey = "" { didSet { keyEdited("s2t") } }
+    @Published var creditConnection: CreditConnection?
+    @Published var creditBalance: CreditBalance?
+    @Published var creditModels = CreditModel.defaults
+    @Published var creditOpenRouterCatalog = false
+    @Published var creditSpeechProvider = TranscriptionProvider.assemblyAI { didSet { preferences.set(creditSpeechProvider.rawValue, forKey: "creditSpeechProvider") } }
+    @Published var creditXAISpeechModel = TranscriptionProvider.xai.defaultModel { didSet { preferences.set(creditXAISpeechModel, forKey: "creditXAISpeechModel") } }
+    var creditTranscriptionModel: String {
+        get { creditSpeechProvider == .xai ? creditXAISpeechModel : creditSpeechProvider == .assemblyAI ? creditSpeechProvider.defaultModel : creditSpeechModel }
+        set { if creditSpeechProvider == .xai { creditXAISpeechModel = newValue } else { creditSpeechModel = newValue } }
+    }
+    @Published var creditSpeechModel = "openai/whisper-large-v3-turbo" { didSet { preferences.set(creditSpeechModel, forKey: "creditSpeechModel") } }
+    @Published var creditCleanupProvider = ProcessingProvider.openRouter { didSet { preferences.set(creditCleanupProvider.rawValue, forKey: "creditCleanupProvider") } }
+    @Published var creditCleanupModel = "openai/gpt-oss-120b" { didSet { preferences.set(creditCleanupModel, forKey: "creditCleanupModel") } }
+    @Published var creditCleanupHost = CreditModel.defaults[0].host { didSet { preferences.set(creditCleanupHost, forKey: "creditCleanupHost") } }
+    @Published private var creditOptionsByModel: [String: OpenRouterOptions] = [:] { didSet { preferences.set(try? JSONEncoder().encode(creditOptionsByModel), forKey: "creditOptionsByModel") } }
+    var creditCleanupOptions: OpenRouterOptions {
+        get { (creditOptionsByModel[creditCleanupModel] ?? OpenRouterOptions()).normalized(for: creditCleanupModel) }
+        set { creditOptionsByModel[creditCleanupModel] = newValue }
+    }
+    func hasSavedCreditCleanupOptions(for model: String) -> Bool { creditOptionsByModel[model] != nil }
+    var creditBalanceLabel: String? {
+        guard let balance = creditBalance else { return nil }
+        let available = balance.available.formatted(.number.precision(.fractionLength(0...2)))
+        let pending = balance.reserved > 0 ? " · \(balance.reserved.formatted(.number.precision(.fractionLength(0...2)))) pending" : ""
+        return "\(available) credits" + pending
+    }
+    var creditStatusRefreshable = false
+    let creditsAPI: CreditsAPI
+    let creditsChecksEnabled: Bool
+    var dictationSession: DictationSession?
+    var creditRequestID: String {
+        get { dictationSession?.requestID ?? "" }
+        set { dictationSession?.requestID = newValue }
+    }
+    var interruptionTask: Task<Bool, Never>?
+    @Published var isPreservingRecording = false
+    var earlyTranscription: EarlyCreditTranscription?
+    var earlyCancellation: Task<Void, Never>?
+    var earlyTranscriptionWait: Double = 0
+
     @Published var promptModeEnabled: Bool { didSet { preferences.set(promptModeEnabled, forKey: "promptModeEnabled"); shortcutSettingsChanged?() } }
     @Published var promptShortcutKey: ShortcutKey { didSet { preferences.set(try? JSONEncoder().encode(promptShortcutKey), forKey: "promptShortcutKey"); shortcutSettingsChanged?() } }
     @Published var promptHoldEnabled: Bool { didSet { preferences.set(promptHoldEnabled, forKey: "promptHoldEnabled"); shortcutSettingsChanged?() } }
     @Published var promptTapEnabled: Bool { didSet { preferences.set(promptTapEnabled, forKey: "promptTapEnabled"); shortcutSettingsChanged?() } }
     var beginPromptShortcutCapture: (() -> Void)?
-    private(set) var sessionIsPrompt = false
+    var sessionIsPrompt = false
     var promptShortcutConflict: Bool { promptShortcutKey.matchesBinding(shortcutKey) }
     func saveShortcut(_ key: ShortcutKey, prompt: Bool) {
         guard !key.matchesBinding(prompt ? shortcutKey : promptShortcutKey) else {
@@ -40,36 +103,35 @@ enum DictationPhase: Equatable {
         }
         if prompt { promptShortcutKey = key } else { shortcutKey = key }
     }
-    @Published var promptVisionProvider: VisionProvider {
-        didSet {
-            preferences.set(promptVisionProvider.rawValue, forKey: "promptVisionProvider")
-            promptVisionModel = preferences.string(forKey: promptVisionProvider.modelPreferenceKey) ?? promptVisionProvider.defaultModel
-        }
+    @Published var routerModelOptions: [String: OpenRouterOptions] {
+        didSet { preferences.set(try? JSONEncoder().encode(routerModelOptions), forKey: "routerModelOptions") }
     }
-    @Published var promptVisionModel: String { didSet { preferences.set(promptVisionModel, forKey: promptVisionProvider.modelPreferenceKey) } }
-    @Published var localVisionURL: String { didSet { preferences.set(localVisionURL, forKey: "localVisionURL") } }
+    func routerOptions(model: String) -> OpenRouterOptions {
+        (routerModelOptions["cleanup:" + model] ?? OpenRouterOptions()).normalized(for: model)
+    }
+    func setRouterOptions(_ options: OpenRouterOptions, model: String) {
+        routerModelOptions["cleanup:" + model] = options
+    }
     @Published var codexModelOptions: [String: CodexOptions] {
         didSet { preferences.set(try? JSONEncoder().encode(codexModelOptions), forKey: "codexModelOptions") }
     }
-    func codexOptions(model: String, vision: Bool) -> CodexOptions {
-        codexModelOptions[(vision ? "vision:" : "cleanup:") + model] ?? CodexOptions()
+    func codexOptions(model: String) -> CodexOptions {
+        codexModelOptions["cleanup:" + model] ?? CodexOptions()
     }
-    func setCodexOptions(_ options: CodexOptions, model: String, vision: Bool) {
+    func setCodexOptions(_ options: CodexOptions, model: String) {
         guard options.isValid else { return }
-        codexModelOptions[(vision ? "vision:" : "cleanup:") + model] = options
+        codexModelOptions["cleanup:" + model] = options
     }
     @Published var codexExecutable: String { didSet { preferences.set(codexExecutable, forKey: "codexExecutable") } }
-    func validatePromptVisionModel(_ value: String) async -> String? {
-        do {
-            try await api.validatePromptVisionModel(value.trimmingCharacters(in: .whitespacesAndNewlines), provider: promptVisionProvider, localURL: localVisionURL)
-            return nil
-        } catch { return error.localizedDescription }
-    }
     @Published var promptLanguage: String { didSet { preferences.set(promptLanguage, forKey: "promptLanguage") } }
     @Published var promptStatus = "Experimental beta · Off by default"
     @Published var promptImages: [URL] = []
-    private let promptListener = PromptSpeechListener()
-    private var promptSession: PromptModeSession?
+    let promptListener = PromptSpeechListener()
+    var promptSession: PromptModeSession?
+    let promptCaptureFeedback = PromptCaptureFeedback()
+    /// Drawn from the event-tap thread during ⌘-drag.
+    var promptSelectionBorder: PromptCaptureBorder { promptCaptureFeedback.border }
+    let promptRegionCapture = PromptRegionCapture()
 
     var promptSetupTitle: String {
         if !PromptSpeechListener.permissionGranted { return "Allow Speech Recognition…" }
@@ -112,6 +174,7 @@ enum DictationPhase: Equatable {
 
     @Published var page: AppPage = .dictation
     @Published var phase: DictationPhase = .idle
+    @Published private(set) var writingPromptDictationActive = false
     @Published var elapsed: TimeInterval = 0
     @Published var rawTranscript = ""
     @Published var output = ""
@@ -120,16 +183,61 @@ enum DictationPhase: Equatable {
     @Published var modelUsed = ""
     @Published var processingFailureModel: String?
     @Published var routeDescription = "Selected model"
-    @Published var elevenLabsKey = "" { didSet { keyEdited("elevenlabs") } }
     @Published var transcriptionProvider: TranscriptionProvider { didSet { preferences.set(transcriptionProvider.rawValue, forKey: "transcriptionProvider") } }
-    @Published var elevenLabsModel: String { didSet { preferences.set(elevenLabsModel, forKey: "elevenLabsTranscriptionModel") } }
+    @Published var xaiTranscriptionModel: String { didSet { preferences.set(xaiTranscriptionModel, forKey: "xaiTranscriptionModel") } }
     @Published var routerTranscriptionModel: String { didSet { preferences.set(routerTranscriptionModel, forKey: "routerTranscriptionModel") } }
+    @Published private(set) var routerSpeechModels = SpeechModelCatalog.reference
+    @Published private(set) var routerTextModels: [OpenRouterTextModel] = []
+    private var speechCatalogRefreshedAt: Date?
+    private var textCatalogRefreshedAt: Date?
+    private var speechCatalogLoading = false
+    private var textCatalogLoading = false
+    private let speechCatalogLoader: (() async throws -> [SpeechModelCatalog])?
+    func refreshSpeechCatalog(force: Bool = false) async {
+        guard !speechCatalogLoading, !isPreview || speechCatalogLoader != nil,
+              force || speechCatalogRefreshedAt.map({ Date().timeIntervalSince($0) >= 6 * 3600 }) ?? true else { return }
+        speechCatalogLoading = true
+        defer { speechCatalogLoading = false }
+        do {
+            let models: [SpeechModelCatalog]
+            if let speechCatalogLoader { models = try await speechCatalogLoader() }
+            else { models = try await SpeechModelCatalog.load() }
+            try Task.checkCancellation()
+            routerSpeechModels = models
+            speechCatalogRefreshedAt = Date()
+        } catch { }
+    }
+    func refreshTextCatalog(force: Bool = false) async {
+        guard !textCatalogLoading, !isPreview,
+              force || textCatalogRefreshedAt.map({ Date().timeIntervalSince($0) >= 6 * 3600 }) ?? true else { return }
+        textCatalogLoading = true
+        defer { textCatalogLoading = false }
+        do {
+            let models = try await OpenRouterTextModel.load()
+            try Task.checkCancellation()
+            routerTextModels = models
+            textCatalogRefreshedAt = Date()
+        } catch { }
+    }
+
+    @Published var artificialAnalysisKey = "" { didSet { keyEdited("artificialanalysis") } }
     @Published var assemblyKey = "" { didSet { keyEdited("assemblyai") } }
+    @Published var xaiKey = "" { didSet { keyEdited("xai") } }
     @Published var routerKey = "" { didSet { keyEdited("openrouter") } }
-    @Published var cerebrasKey = "" { didSet { keyEdited("cerebras") } }
-    @Published private(set) var keyStatuses: [String: APIKeyStatus] = [:]
-    private var keyChecks: [String: Task<Void, Never>] = [:]
-    private var keyRevisions: [String: UUID] = [:]
+    @Published var typeSafeKey = "" { didSet { keyEdited("typesafe") } }
+    @Published var jevRoute: JevRoute { didSet { preferences.set(jevRoute.rawValue, forKey: "jevRoute") } }
+    @Published var jevCleanupMode: JevCleanupMode { didSet { preferences.set(jevCleanupMode.rawValue, forKey: "jevCleanupMode") } }
+    @Published var jevSummary = ""
+    @Published var dictionaryCategorizationEnabled: Bool {
+        didSet { preferences.set(dictionaryCategorizationEnabled, forKey: "dictionaryCategorizationEnabled"); dictionaryLearner.stop() }
+    }
+    @Published var dictionaryLearningRoute: DictionaryLearningRoute {
+        didSet { preferences.set(dictionaryLearningRoute.rawValue, forKey: "dictionaryLearningRoute"); dictionaryLearner.stop() }
+    }
+    @Published private(set) var dictionaryLearningStatus = "Word corrections are detected and saved locally after dictation. No key or credits needed."
+    @Published var keyStatuses: [String: APIKeyStatus] = [:]
+    var keyChecks: [String: Task<Void, Never>] = [:]
+    var keyRevisions: [String: UUID] = [:]
     @Published var processingProvider: ProcessingProvider? {
         didSet {
             preferences.set(processingProvider?.rawValue, forKey: "processingProvider")
@@ -173,7 +281,8 @@ enum DictationPhase: Equatable {
     }
     var setupReady: Bool { !needsInstallation && dictationPermissionsReady && setupKeysReady && (shortcutAvailable || (!holdEnabled && !tapEnabled)) }
     var setupKeysReady: Bool {
-        let accounts = [transcriptionProvider.rawValue] + (mode == .verbatim ? [] : processingProvider.map { [$0.rawValue] } ?? [])
+        let accounts = [speechUsesCredits ? "s2t" : transcriptionProvider.rawValue]
+            + (mode == .verbatim ? [] : cleanupUsesCredits ? ["s2t"] : processingProvider.map { [$0.rawValue] } ?? [])
         return canRecord && accounts.filter { $0 != "local" && $0 != "codex" }.allSatisfy { savedKeyAccounts.contains($0) && keyStatuses[$0]?.needsAttention != true && keyStatuses[$0] != .checking }
     }
     var setupSummary: String {
@@ -181,9 +290,9 @@ enum DictationPhase: Equatable {
         if !dictationPermissionsReady { return "Allow the two permissions below. S2T checks again when you return." }
         if !setupKeysReady { return "Configure your provider keys, local endpoints or Codex below. Verbatim needs only speech recognition." }
         if !shortcutAvailable && (holdEnabled || tapEnabled) { return shortcutStatus }
-        if !holdEnabled && !tapEnabled { return "Shortcut behaviors are off. Use Start dictation in the main menu, then Finish dictation." }
-        if !holdEnabled { return "Close this menu and click a text field. Tap \(shortcutKey.displayName) to start, then tap again to finish." }
-        return "Click a text field, then hold \(shortcutKey.displayName) and speak. Release to finish. Close this menu first."
+        if !holdEnabled && !tapEnabled { return "Shortcut behaviors are off. Use Start dictation in Settings, then Finish dictation." }
+        if !holdEnabled { return "Click a text field. Tap \(shortcutKey.displayName) to start, then tap again to finish." }
+        return "Click a text field, then hold \(shortcutKey.displayName) and speak. Release to finish."
     }
     var permissionActionTitle: String {
         if settingUpPermissions { return "Waiting for microphone access…" }
@@ -246,49 +355,126 @@ enum DictationPhase: Equatable {
     }
     @Published var holdEnabled: Bool { didSet { preferences.set(holdEnabled, forKey: "holdEnabled"); shortcutSettingsChanged?() } }
     @Published var tapEnabled: Bool { didSet { preferences.set(tapEnabled, forKey: "tapEnabled"); shortcutSettingsChanged?() } }
-    @Published private(set) var savedKeyAccounts: Set<String> = []
+    @Published var savedKeyAccounts: Set<String> = []
     @Published var mode: WritingMode { didSet { preferences.set(mode.rawValue, forKey: "writingMode") } }
     @Published var processingModel: String { didSet { guard let processingProvider else { return }; preferences.set(processingModel, forKey: processingProvider.modelPreferenceKey) } }
     @Published var localProcessingURL: String { didSet { preferences.set(localProcessingURL, forKey: "localProcessingURL") } }
     @Published var localTranscriptionURL: String { didSet { preferences.set(localTranscriptionURL, forKey: "localTranscriptionURL") } }
     @Published var localTranscriptionModel: String { didSet { preferences.set(localTranscriptionModel, forKey: "localTranscriptionModel") } }
+    func localConfiguration(for category: String) -> (url: String, model: String) {
+        switch category {
+        case "speech": return (localTranscriptionURL, localTranscriptionModel)
+        case "text": return (localProcessingURL, preferences.string(forKey: ProcessingProvider.local.modelPreferenceKey) ?? ProcessingProvider.local.defaultModel)
+        default: preconditionFailure("Unsupported local model category")
+        }
+    }
+
+    func managedLocalModelID(for category: String) -> String? {
+        let isLocal = category == "speech" ? transcriptionProvider == .local : processingProvider == .local
+        let configuration = localConfiguration(for: category)
+        return isLocal && configuration.url == LocalModels.managedEndpoint ? configuration.model : nil
+    }
+
+    func rememberCustomLocalEndpoint(for category: String) {
+        let configuration = localConfiguration(for: category)
+        guard configuration.url != LocalModels.managedEndpoint else { return }
+        preferences.set(["url": configuration.url, "model": configuration.model], forKey: "customLocalEndpoint." + category)
+    }
+
+    func selectLocalEndpoint(for category: String) {
+        guard !phase.busy, phase != .recording else { return }
+        var configuration = localConfiguration(for: category)
+        if configuration.url == LocalModels.managedEndpoint {
+            let saved = preferences.dictionary(forKey: "customLocalEndpoint." + category) as? [String: String] ?? [:]
+            let defaultModel = category == "speech" ? TranscriptionProvider.local.defaultModel : ProcessingProvider.local.defaultModel
+            configuration = (saved["url"] ?? (category == "speech" ? LocalEndpoint.defaultTranscriptionURL : LocalEndpoint.defaultProcessingURL), saved["model"] ?? defaultModel)
+        }
+        switch category {
+        case "speech":
+            speechUsesCredits = false
+            transcriptionProvider = .local
+            localTranscriptionURL = configuration.url
+            localTranscriptionModel = configuration.model
+        case "text":
+            cleanupUsesCredits = false
+            processingProvider = .local
+            localProcessingURL = configuration.url
+            processingModel = configuration.model
+        default: return
+        }
+    }
+
     @Published var routerEndpoint: String { didSet { preferences.set(routerEndpoint, forKey: "routerEndpoint") } }
     var processingSelectionLabel: String {
         guard let processingProvider else { return "Choose a text processing provider." }
         let host = processingProvider == .openRouter && !routerEndpoint.isEmpty ? " · Host: " + routerEndpoint : ""
         return "Model: " + processingModel + host
     }
-    static var systemPromptFile: SystemPromptFile {
+    static var instructionsFile: InstructionsFile {
         let directory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        return SystemPromptFile(url: directory.appendingPathComponent("S2T/system-prompt.txt"))
+        return InstructionsFile(url: directory.appendingPathComponent("S2T").appendingPathComponent(InstructionsFile.filename))
     }
     static var dictionaryFile: DictionaryFile {
-        DictionaryFile(url: systemPromptFile.url.deletingLastPathComponent().appendingPathComponent("dictionary.md"))
+        DictionaryFile(url: instructionsFile.url.deletingLastPathComponent().appendingPathComponent("dictionary.md"))
     }
-    private let dictionaryLearner = DictionaryLearner()
+    let dictionaryLearner = DictionaryLearner()
+    func startDictionaryLearning(output: String, recipient: pid_t?, expectedField: AXUIElement?, insertionSelection: CFRange?, insertionBaseline: String?) {
+        let route = dictionaryLearningRoute
+        let key = (route == .typeSafe ? typeSafeKey : routerKey).trimmingCharacters(in: .whitespacesAndNewlines)
+        let connection = creditConnection
+        let api = api, credits = creditsAPI, requestID = UUID().uuidString
+        let judge: DictionaryLearningController.Judge = { [weak self] plan in
+            do {
+                if route == .s2t {
+                    guard let connection else { throw ServiceError.message("Connect S2T credits in Settings to add categories.") }
+                    return try await credits.learnDictionaryCorrection(plan, connection: connection, requestID: requestID)
+                }
+                guard !key.isEmpty else { throw ServiceError.message("Add your \(route.title) in Settings → API keys to add categories.") }
+                return try await api.learnDictionaryCorrection(plan, apiKey: key, route: route)
+            } catch {
+                await self?.dictionaryLearningFailed(error, key: route == .s2t ? connection?.key ?? "" : key)
+                throw error
+            }
+        }
+        dictionaryLearner.start(output: output, file: Self.dictionaryFile, recipient: recipient, expectedField: expectedField,
+            insertionSelection: insertionSelection.map { NSRange(location: $0.location, length: $0.length) },
+            insertionBaseline: insertionBaseline,
+            judge: dictionaryCategorizationEnabled ? judge : nil, onStatus: { [weak self] status in
+            self?.dictionaryLearningStatus = status
+            self?.preferences.set(status, forKey: "lastDictionaryLearningStatus")
+        }, onError: { [weak self] error in
+            self?.dictionaryLearningStatus = error
+            self?.preferences.set(error, forKey: "lastDictionaryLearningStatus")
+            self?.errorMessage = error
+        })
+    }
+    private func dictionaryLearningFailed(_ error: Error, key: String) {
+        guard !(error is CancellationError) else { return }
+        _ = recordKeyFailure(error, using: key)
+    }
     func revealDictionaryInFinder() {
         do {
             _ = try Self.dictionaryFile.read()
             NSWorkspace.shared.activateFileViewerSelecting([Self.dictionaryFile.url])
         } catch { errorMessage = "Could not reveal dictionary in Finder. " + error.localizedDescription }
     }
-    func openSystemPromptInFinder() {
+    func openInstructionsInFinder() {
         do {
-            try Self.systemPromptFile.ensureExists()
-            NSWorkspace.shared.activateFileViewerSelecting([Self.systemPromptFile.url])
-        } catch { errorMessage = "Could not open the system prompt file. " + error.localizedDescription }
+            try Self.instructionsFile.ensureExists()
+            NSWorkspace.shared.activateFileViewerSelecting([Self.instructionsFile.url])
+        } catch { errorMessage = "Could not open the instructions file. " + error.localizedDescription }
     }
     func saveProcessingModel(_ value: String, for provider: ProcessingProvider) -> String? {
         guard processingProvider == provider else { return "Provider changed. Reopen Models before saving." }
         let model = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        if provider == .openRouter && model == "cerebras/fp16" { return "This is a hosting endpoint. Use the Cerebras preset under Models." }
         guard provider.validModelID(model) else { return "Enter a valid \(provider.title) model ID." }
+        if provider == .openRouter && processingModel != model { routerEndpoint = "" }
         processingModel = model
         return nil
     }
     func useCerebrasThroughOpenRouter() {
         processingProvider = .openRouter
-        processingModel = ProcessingProvider.cerebrasOpenRouterModel
+        processingModel = ProcessingProvider.defaultOpenRouterModel
         routerEndpoint = "cerebras/fp16"
     }
     var processingEndpoint: String? { processingProvider == .openRouter ? routerEndpoint : nil }
@@ -298,6 +484,13 @@ enum DictationPhase: Equatable {
         didSet { preferences.set(disabledInputPresets.sorted(), forKey: "disabledInputPresets") }
     }
     @Published var glowAppearance: GlowAppearance { didSet { preferences.set(glowAppearance.rawValue, forKey: "glowAppearance") } }
+    @Published var classicAnchor: GlassCapsuleAnchor? {
+        didSet {
+            if let classicAnchor, let data = try? JSONEncoder().encode(classicAnchor) {
+                preferences.set(data, forKey: "liquidGlassPlacement.v1")
+            }
+        }
+    }
     @Published var bezelVerticalPosition: Double { didSet { preferences.set(bezelVerticalPosition, forKey: "bezelVerticalPosition") } }
     @Published var bezelSide: BezelSide { didSet { preferences.set(bezelSide.rawValue, forKey: "bezelSide") } }
     @Published var glowWidth: Double { didSet { preferences.set(glowWidth, forKey: "glowWidth") } }
@@ -309,47 +502,121 @@ enum DictationPhase: Equatable {
     var glowResponseSettings: GlowResponseSettings { .init(width: glowWidth, minimum: glowMinimum, maximum: glowMaximum, tuning: glowTuning) }
     @Published var glowStrength: Double { didSet { preferences.set(glowStrength, forKey: "glowStrength") } }
 
-    private let focusHistory: AppFocusHistory
-    private let preferences: UserDefaults
-    private let api: DictationAPI
-    private let microphone = Microphone()
-    private var work: Task<Void, Never>?
-    private var connectionTask: Task<Void, Never>?
-    private var hideTask: Task<Void, Never>?
+    let focusHistory: AppFocusHistory
+    let preferences: UserDefaults
+    static let optionalProviders = [(id: "s2t", title: "S2T credits"), (id: "openrouter", title: "OpenRouter"), (id: "xai", title: "xAI"), (id: "local", title: "Local")]
+    @Published private(set) var hiddenProviders = Set<String>() {
+        didSet { preferences.set(hiddenProviders.sorted(), forKey: "hiddenProviders") }
+    }
+
+    func isProviderVisible(_ id: String) -> Bool {
+        !hiddenProviders.contains(id.lowercased())
+    }
+
+    func setProviderVisible(_ id: String, _ visible: Bool) {
+        if visible { hiddenProviders.remove(id) }
+        else { hiddenProviders.insert(id) }
+    }
+
+    func isModelProviderVisible(for category: String) -> Bool {
+        let credits = usesCredits(for: category)
+        guard !credits || isProviderVisible("s2t") else { return false }
+        let provider = category == "speech" ? (credits ? creditSpeechProvider : transcriptionProvider).rawValue
+            : credits ? creditCleanupProvider.rawValue : processingProvider?.rawValue ?? ""
+        return isProviderVisible(provider)
+    }
+    let api: DictationAPI
+    let microphone: Microphone
+    let requestMicrophoneAccess: () async -> Bool
+    var work: Task<Void, Never>?
+    var connectionTask: Task<Void, Never>?
+    var hideTask: Task<Void, Never>?
     private var copyTask: Task<Void, Never>?
-    private var meterTimer: Timer?
-    private var startedAt = Date()
+    var meterTimer: Timer?
+    var startedAt = Date()
+    var finishRequestedAt: TimeInterval?
     private var previewStartedAt: Double = 0
-    private var recording: Data?
-    private var startTargetTask: Task<TextInsertion.Target?, Never>?
-    @Published var pasteAtStart: Bool { didSet { preferences.set(pasteAtStart, forKey: "pasteAtStart") } }
-    private var insertionTarget: TextInsertion.Target?
-    private var sessionMode: WritingMode = .clean
-    private var sessionProvider: ProcessingProvider?
+    var recording: Data? {
+        get { dictationSession?.audio }
+        set { dictationSession?.audio = newValue }
+    }
+    let recoveryStore: RecordingRecoveryStore?
+    var recovery: RecordingRecovery? {
+        get { dictationSession?.recovery }
+        set { dictationSession?.recovery = newValue }
+    }
+    var recoveryIsSaved: Bool {
+        get { dictationSession?.isSaved ?? true }
+        set { dictationSession?.isSaved = newValue }
+    }
+    @Published var recoveredRecordings: [RecordingRecovery] = []
+    @Published var historicalStreamingReceiptCount = 0
+    var historicalReceiptNotice: String? {
+        historicalStreamingReceiptCount > 0
+            ? "Saved legacy streaming receipts need confirmation from S2T support. They may already have been reconciled; local receipt metadata is preserved."
+            : nil
+    }
+    var canSaveRecording: Bool { recording != nil && !phase.busy && phase != .recording }
+
+    var finishTargetTask: Task<TextInsertion.Target?, Never>?
+    var promptDeliveryTarget: Task<TextInsertion.Target?, Never>? {
+        phase != .preparing && phase != .recording ? finishTargetTask : nil
+    }
+    let bottomWindowTracker = WindowBottomTracker()
+    var insertionTarget: TextInsertion.Target?
+    var sessionMode: WritingMode { dictationSession?.configuration.mode ?? mode }
     private var audioChangeObserver: NSObjectProtocol?
     private var sleepObserver: NSObjectProtocol?
     let isPreview: Bool
-    private let outputPasteboard: NSPasteboard
-    private let insertText: (String, TextInsertion.Target?) async throws -> TextInsertion.Outcome
-    private let insertPromptImages: ([URL], pid_t?, NSPasteboard) async throws -> PromptImageInsertion.Result
-    private let promptStorageDirectory: URL
+    let outputPasteboard: NSPasteboard
+    let insertText: (String, TextInsertion.Target?, TextInsertion.BeforePaste?) async throws -> TextInsertion.Outcome
+    let insertPromptImages: ([URL], pid_t?, NSPasteboard, Bool, TextInsertion.Target?) async throws -> PromptImageInsertion.Result
+    let promptStorageDirectory: URL
 
-    init(preview: Bool = false, api: DictationAPI = DictationAPI(), clipboardMonitor: ClipboardMonitor? = nil, outputPasteboard: NSPasteboard? = nil, promptSession: PromptModeSession? = nil, insertPromptImages: (([URL], pid_t?, NSPasteboard) async throws -> PromptImageInsertion.Result)? = nil, insertText: @escaping (String, TextInsertion.Target?) async throws -> TextInsertion.Outcome = { try await TextInsertion.insert($0, into: $1) }) {
-        self.insertText = insertText
-        self.insertPromptImages = insertPromptImages ?? { images, recipient, board in
-            guard !preview else { return .init(sentCount: 0, issue: "Image insertion is disabled in preview.", clipboardChange: board.changeCount) }
-            return try await PromptImageInsertion.insert(images, recipient: recipient, board: board)
+    init(preview: Bool = false, previewPreferences: UserDefaults? = nil, microphone: Microphone = Microphone(), microphoneAccess: (() async -> Bool)? = nil, speechCatalogLoader: (() async throws -> [SpeechModelCatalog])? = nil, recoveryStore: RecordingRecoveryStore? = nil, api: DictationAPI? = nil, creditsAPI: CreditsAPI? = nil, clipboardMonitor: ClipboardMonitor? = nil, outputPasteboard: NSPasteboard? = nil, promptSession: PromptModeSession? = nil, insertPromptImages: (([URL], pid_t?, NSPasteboard, Bool) async throws -> PromptImageInsertion.Result)? = nil, insertText: ((String, TextInsertion.Target?) async throws -> TextInsertion.Outcome)? = nil) {
+        self.speechCatalogLoader = speechCatalogLoader
+        self.microphone = microphone
+        self.requestMicrophoneAccess = microphoneAccess ?? {
+            guard !preview else { return false }
+            if AVCaptureDevice.authorizationStatus(for: .audio) == .authorized { return true }
+            return await AVCaptureDevice.requestAccess(for: .audio)
         }
+        self.insertText = { text, target, beforePaste in
+            if let insertText {
+                if let beforePaste, !(try await beforePaste()) { return .noTarget }
+                return try await insertText(text, target)
+            }
+            return try await TextInsertion.insert(text, into: target, beforePaste: beforePaste)
+        }
+        self.insertPromptImages = { images, recipient, board, beforeText, target in
+            if let insertPromptImages { return try await insertPromptImages(images, recipient, board, beforeText) }
+            guard !preview else { return .init(sentCount: 0, issue: "Image insertion is disabled in preview.", clipboardChange: board.changeCount) }
+            let pinned = target?.promptDestination != nil
+            let command = await target?.pasteCommand?.value
+            return try await PromptImageInsertion.handOver(images, recipient: recipient, board: board,
+                currentRecipient: { pinned ? target?.app.processIdentifier : NSWorkspace.shared.frontmostApplication?.processIdentifier },
+                destinationIsCurrent: { if !pinned { return true }; return await TextInsertion.promptDestinationIsCurrent(target) },
+                nativePaste: command.map { command in { await Task.detached { AXUIElementPerformAction(command, kAXPressAction as CFString) }.value } },
+                textPastedAt: target?.textPastedAt)
+        }
+        self.recoveryStore = recoveryStore ?? (preview ? nil : RecordingRecoveryStorage.makeStore())
         self.promptSession = preview ? promptSession : nil
         promptStorageDirectory = preview
             ? FileManager.default.temporaryDirectory.appendingPathComponent("s2t-prompt-preview-" + UUID().uuidString)
-            : Self.systemPromptFile.url.deletingLastPathComponent().appendingPathComponent("Prompt references")
+            : Self.instructionsFile.url.deletingLastPathComponent().appendingPathComponent("Prompt references")
         self.outputPasteboard = outputPasteboard ?? (preview ? NSPasteboard(name: NSPasteboard.Name("com.s2t.preview.output.\(UUID().uuidString)")) : .general)
         self.clipboardMonitor = clipboardMonitor ?? ClipboardMonitor(persistence: preview ? nil : ClipboardStorage.makeStore())
+        self.recentRecordings = RecentRecordings(store: preview ? nil : TranscriptHistoryStorage.makeStore())
         self.isPreview = preview
         focusHistory = AppFocusHistory(observe: !preview)
-        self.api = api
-        preferences = preview ? UserDefaults(suiteName: "com.s2t.preview")! : .standard
+        let ledger = LocalUsageLedger(file: preview ? nil : FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("S2T/local-usage.json"))
+        self.localUsage = ledger
+        self.api = api ?? DictationAPI(transport: LocalUsageTransport(ledger: ledger))
+        self.creditsAPI = creditsAPI ?? CreditsAPI(transport: LocalUsageTransport(base: CreditTransport(), ledger: ledger, credits: true), device: preview ? nil : CreditDeviceIdentity.current())
+        creditsChecksEnabled = !preview || creditsAPI != nil
+        preferences = preview ? (previewPreferences ?? UserDefaults(suiteName: "com.s2t.preview")!) : .standard
+        hiddenProviders = Set(preferences.stringArray(forKey: "hiddenProviders") ?? [])
+        preferences.removeObject(forKey: "hideExtraProviders")
         if !preview, !preferences.bool(forKey: "legacyPreferencesImported") {
             if let previous = UserDefaults(suiteName: "com.sotto.dictation") {
                 for key in ["writingMode", "fallbackModel", "autoCopy", "pasteToApp", "glowStrength"] where preferences.object(forKey: key) == nil {
@@ -358,39 +625,61 @@ enum DictationPhase: Equatable {
             }
             preferences.set(true, forKey: "legacyPreferencesImported")
         }
+        let savedCreditSpeechProvider = preferences.string(forKey: "creditSpeechProvider")
+        creditSpeechProvider = savedCreditSpeechProvider == "xai" ? .xai : savedCreditSpeechProvider == TranscriptionProvider.openRouter.rawValue ? .openRouter : .assemblyAI
+        creditXAISpeechModel = preferences.string(forKey: "creditXAISpeechModel") ?? TranscriptionProvider.xai.defaultModel
+        creditSpeechModel = preferences.string(forKey: "creditSpeechModel") ?? "openai/whisper-large-v3-turbo"
+        let savedCreditCleanupModel = preferences.string(forKey: "creditCleanupModel") ?? "openai/gpt-oss-120b"
+        let savedCreditCleanupProvider: ProcessingProvider = preferences.string(forKey: "creditCleanupProvider") == "xai" ? .xai : .openRouter
+        creditCleanupModel = savedCreditCleanupModel
+        creditCleanupProvider = savedCreditCleanupProvider
+        creditCleanupHost = preferences.string(forKey: "creditCleanupHost") ?? (savedCreditCleanupProvider == .openRouter && savedCreditCleanupModel == CreditModel.defaults[0].model ? CreditModel.defaults[0].host : "")
+        creditOptionsByModel = preferences.data(forKey: "creditOptionsByModel").flatMap { try? JSONDecoder().decode([String: OpenRouterOptions].self, from: $0) } ?? [:]
+        speechUsesCredits = preferences.object(forKey: "speechUsesCredits") as? Bool ?? preferences.bool(forKey: "creditsEnabled")
+        earlyTranscriptionEnabled = preferences.object(forKey: "earlyTranscriptionEnabled") as? Bool ?? !preview
+        cleanupUsesCredits = preferences.object(forKey: "cleanupUsesCredits") as? Bool ?? preferences.bool(forKey: "creditsEnabled")
         promptModeEnabled = preferences.bool(forKey: "promptModeEnabled")
         promptShortcutKey = preferences.data(forKey: "promptShortcutKey").flatMap { try? JSONDecoder().decode(ShortcutKey.self, from: $0) } ?? .rightCommand
         promptHoldEnabled = preferences.object(forKey: "promptHoldEnabled") as? Bool ?? true
         promptTapEnabled = preferences.object(forKey: "promptTapEnabled") as? Bool ?? true
-        let visionProvider = VisionProvider(rawValue: preferences.string(forKey: "promptVisionProvider") ?? "") ?? .openRouter
-        promptVisionProvider = visionProvider
-        promptVisionModel = preferences.string(forKey: visionProvider.modelPreferenceKey) ?? visionProvider.defaultModel
-        localVisionURL = preferences.string(forKey: "localVisionURL") ?? LocalEndpoint.defaultProcessingURL
+        let savedRouterOptions = preferences.data(forKey: "routerModelOptions")
+        var initialRouterOptions = savedRouterOptions.flatMap { try? JSONDecoder().decode([String: OpenRouterOptions].self, from: $0) } ?? [:]
+        if preferences.object(forKey: "fallbackModel") == nil,
+           savedRouterOptions == nil {
+            initialRouterOptions["cleanup:" + ProcessingProvider.defaultOpenRouterModel] = .init(reasoning: .low)
+        }
+        routerModelOptions = initialRouterOptions
         codexModelOptions = preferences.data(forKey: "codexModelOptions").flatMap { try? JSONDecoder().decode([String: CodexOptions].self, from: $0) } ?? [:]
         codexExecutable = preferences.string(forKey: "codexExecutable") ?? ""
         promptLanguage = preferences.string(forKey: "promptLanguage") ?? "en-US"
-        pasteAtStart = preferences.bool(forKey: "pasteAtStart")
-        clipboardContextEnabled = preferences.object(forKey: "clipboardContextEnabled") as? Bool ?? true
+        clipboardContextEnabled = preferences.object(forKey: "clipboardContextEnabled") as? Bool ?? false
         localProcessingURL = preferences.string(forKey: "localProcessingURL") ?? LocalEndpoint.defaultProcessingURL
         localTranscriptionURL = preferences.string(forKey: "localTranscriptionURL") ?? LocalEndpoint.defaultTranscriptionURL
         localTranscriptionModel = preferences.string(forKey: "localTranscriptionModel") ?? TranscriptionProvider.local.defaultModel
         transcriptionProvider = TranscriptionProvider(rawValue: preferences.string(forKey: "transcriptionProvider") ?? "") ?? .assemblyAI
-        elevenLabsModel = preferences.string(forKey: "elevenLabsTranscriptionModel") ?? TranscriptionProvider.elevenLabs.defaultModel
+        xaiTranscriptionModel = preferences.string(forKey: "xaiTranscriptionModel") ?? TranscriptionProvider.xai.defaultModel
         routerTranscriptionModel = preferences.string(forKey: "routerTranscriptionModel") ?? TranscriptionProvider.openRouter.defaultModel
         transcriptionMode = TranscriptionMode(rawValue: preferences.string(forKey: "transcriptionMode") ?? "") ?? .fast
         mode = WritingMode(rawValue: preferences.string(forKey: "writingMode") ?? "") ?? .clean
+        jevRoute = JevRoute(rawValue: preferences.string(forKey: "jevRoute") ?? "") ?? .typeSafe
+        jevCleanupMode = JevCleanupMode(rawValue: preferences.string(forKey: "jevCleanupMode") ?? "") ?? .off
+        dictionaryCategorizationEnabled = preferences.bool(forKey: "dictionaryCategorizationEnabled")
+        dictionaryLearningRoute = DictionaryLearningRoute(rawValue: preferences.string(forKey: "dictionaryLearningRoute") ?? "")
+            ?? .typeSafe
         let provider = ProcessingProvider(rawValue: preferences.string(forKey: "processingProvider") ?? "") ?? .openRouter
         processingProvider = provider
         let savedModel = preferences.string(forKey: provider.modelPreferenceKey) ?? provider.defaultModel
         let misplacedEndpoint = provider == .openRouter && savedModel == "cerebras/fp16"
-        processingModel = misplacedEndpoint ? ProcessingProvider.cerebrasOpenRouterModel : savedModel
-        routerEndpoint = misplacedEndpoint ? "cerebras/fp16" : preferences.string(forKey: "routerEndpoint") ?? ProcessingProvider.openRouter.defaultEndpoint!
+        processingModel = misplacedEndpoint ? ProcessingProvider.defaultOpenRouterModel : savedModel
+        routerEndpoint = misplacedEndpoint ? "cerebras/fp16"
+            : preferences.string(forKey: "routerEndpoint")
+                ?? (preferences.object(forKey: "fallbackModel") == nil && savedModel == ProcessingProvider.defaultOpenRouterModel ? "cerebras/fp16" : "")
         if misplacedEndpoint {
-            preferences.set(ProcessingProvider.cerebrasOpenRouterModel, forKey: "fallbackModel")
-            preferences.set("cerebras/fp16", forKey: "routerEndpoint")
+            preferences.set(ProcessingProvider.defaultOpenRouterModel, forKey: "fallbackModel")
         }
         disabledInputPresets = Set(preferences.stringArray(forKey: "disabledInputPresets") ?? [])
         menuAppearance = preferences.string(forKey: "menuAppearance") ?? "system"
+        classicAnchor = preferences.data(forKey: "liquidGlassPlacement.v1").flatMap { try? JSONDecoder().decode(GlassCapsuleAnchor.self, from: $0) }
         glowAppearance = GlowAppearance(rawValue: preferences.string(forKey: "glowAppearance") ?? "") ?? .bottom
         let savedBezelPosition = preferences.object(forKey: "bezelVerticalPosition") as? Double ?? 0.5
         bezelVerticalPosition = savedBezelPosition.isFinite ? min(1, max(0, savedBezelPosition)) : 0.5
@@ -405,11 +694,26 @@ enum DictationPhase: Equatable {
         shortcutKey = preferences.data(forKey: "shortcutKey").flatMap { try? JSONDecoder().decode(ShortcutKey.self, from: $0) } ?? .function
         holdEnabled = preferences.object(forKey: "holdEnabled") as? Bool ?? true
         tapEnabled = preferences.object(forKey: "tapEnabled") as? Bool ?? true
+        if classicAnchor == nil, glowAppearance == .bezel, let screen = NSScreen.screens.first {
+            let placement = BezelGeometry.frame(screen: screen.frame, side: bezelSide, verticalPosition: bezelVerticalPosition)
+            let anchor = GlassCapsuleAnchor(center: CGPoint(x: placement.midX, y: placement.midY),
+                visibleFrame: screen.visibleFrame, displayID: GlassCapsulePlacementStore.identifier(for: screen), side: bezelSide)
+            classicAnchor = anchor
+            if let data = try? JSONEncoder().encode(anchor) { preferences.set(data, forKey: "liquidGlassPlacement.v1") }
+        }
+        preferences.set(transcriptionProvider.rawValue, forKey: "transcriptionProvider")
         self.clipboardMonitor.onChange = { [weak self] in self?.objectWillChange.send() }
         if !preview {
             if clipboardContextEnabled { self.clipboardMonitor.start() }
             if processingProvider == nil { page = .connections }
             loadSavedKeys()
+            let reasoningModels = Set([processingModel, creditCleanupModel])
+            Task {
+                await withTaskGroup(of: Void.self) { group in
+                    for model in reasoningModels { group.addTask { await OpenRouterReasoningCatalog.shared.refresh(model: model) } }
+                }
+            }
+            Task { await refreshRecoveredRecordings() }
             audioChangeObserver = NotificationCenter.default.addObserver(forName: Microphone.configurationChanged, object: microphone, queue: .main) { [weak self] _ in
                 Task { @MainActor in
                     guard let self else { return }
@@ -420,72 +724,100 @@ enum DictationPhase: Equatable {
                 }
             }
             sleepObserver = NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.willSleepNotification, object: nil, queue: .main) { [weak self] _ in
-                Task { @MainActor in self?.cancel() }
+                Task { @MainActor in _ = await self?.preserveForInterruption() }
             }
         }
     }
 
-    @Published private(set) var savedKeysLocked = false
+    @Published var savedKeysLocked = false
 
-    func loadSavedKeys(allowInteraction: Bool = false) {
-        guard !isPreview else { return }
-        savedKeysLocked = false
-        for account in APIAccount.allCases {
-            if !keyValue(account.rawValue).isEmpty && !savedKeyAccounts.contains(account.rawValue) { continue }
-            do {
-                let value = try Keychain.read(account.rawValue, allowInteraction: allowInteraction)
-                guard !value.isEmpty else { continue }
-                switch account {
-                case .assemblyAI: assemblyKey = value
-                case .openRouter: routerKey = value
-                case .elevenLabs: elevenLabsKey = value
-                case .cerebras: cerebrasKey = value
-                }
-                savedKeyAccounts.insert(account.rawValue)
-                keyStatuses[account.rawValue] = nil
-            } catch {
-                savedKeysLocked = true
-                keyStatuses[account.rawValue] = .issue("Saved key is locked. Choose Unlock saved keys under API keys. Existing keys are preserved.")
-                if allowInteraction { break }
-            }
-        }
-        if allowInteraction && !savedKeysLocked && clipboardMonitor.persistenceError != nil {
-            do {
-                _ = try Keychain.read("clipboard-history-encryption", allowInteraction: true)
-                if clipboardContextEnabled { clipboardMonitor.poll() }
-            } catch { savedKeysLocked = true }
-        }
-        credentialsSaved = !transcriptionKey.isEmpty
-    }
-
-    var processingKey: String {
-        switch processingProvider {
-        case .openRouter: return routerKey
-        case .cerebras: return cerebrasKey
-        case .local, .codex, nil: return ""
-        }
-    }
     var transcriptionKey: String { keyValue(transcriptionProvider.rawValue) }
     var transcriptionModel: String {
         switch transcriptionProvider {
+        case .xai: return xaiTranscriptionModel
         case .local: return localTranscriptionModel
         case .assemblyAI: return transcriptionProvider.defaultModel
-        case .elevenLabs: return elevenLabsModel
         case .openRouter: return routerTranscriptionModel
         }
     }
-    var canRecord: Bool {
-        guard let provider = processingProvider else { return false }
-        let speechReady = transcriptionProvider == .local
-            ? (try? LocalEndpoint.url(localTranscriptionURL)) != nil && TranscriptionProvider.local.validModelID(localTranscriptionModel)
-            : !transcriptionKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        let cleanupReady: Bool
-        switch provider {
-        case .local: cleanupReady = (try? LocalEndpoint.url(localProcessingURL)) != nil && provider.validModelID(processingModel)
-        case .codex: cleanupReady = provider.validModelID(processingModel)
-        case .openRouter, .cerebras: cleanupReady = !processingKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+
+    func reserveWritingPromptDictation() throws {
+        guard !meetingRecordingActive, !writingPromptDictationActive, !phase.busy, phase != .recording else {
+            throw ServiceError.message("Finish the current dictation before recording an editing request.")
         }
-        return speechReady && (mode == .verbatim || cleanupReady)
+        guard !needsInstallation else { throw ServiceError.message(setupSummary) }
+        writingPromptDictationActive = true
+    }
+
+    func releaseWritingPromptDictation() {
+        writingPromptDictationActive = false
+    }
+
+    func transcribeWritingPrompt(_ audio: Data) async throws -> String {
+        let connection = speechUsesCredits ? creditConnection : nil
+        let provider = connection == nil ? transcriptionProvider : creditSpeechProvider
+        let key = connection?.key ?? transcriptionKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        let model = connection == nil ? transcriptionModel : creditTranscriptionModel
+        let mode = connection == nil ? transcriptionMode : .fast
+        var localURL = localTranscriptionURL
+
+        if speechUsesCredits, connection == nil {
+            throw ServiceError.message("Add your S2T key under API keys before dictating an editing request.")
+        }
+        if provider != .local && connection == nil && key.isEmpty {
+            throw ServiceError.message("Add the key for your selected speech provider before dictating an editing request.")
+        }
+        if provider == .local, localURL == LocalModels.managedEndpoint, !model.hasPrefix("apple-speech-") {
+            localURL = try await localModels.url(for: model, path: "/audio/transcriptions")
+        }
+
+        let transcription: TimedTranscription
+        if let connection {
+            guard mode == .fast else { throw ServiceError.message("S2T credits support Fast recognition. Select Fast under Models.") }
+            transcription = try await creditsAPI.transcribe(audio: audio, provider: provider, model: model,
+                endpoint: nil, connection: connection, requestID: UUID().uuidString + "-writing")
+            Task { await refreshCredits() }
+        } else if provider == .local, localURL == LocalModels.managedEndpoint, model.hasPrefix("apple-speech-") {
+            guard #available(macOS 26, *) else { throw ServiceError.message("Apple Speech requires macOS 26 or newer.") }
+            transcription = try await NativeSpeechModels.transcribe(audio: audio, modelID: model)
+        } else {
+            transcription = try await api.transcribeDetailed(audio: audio, apiKey: key, mode: mode,
+                provider: provider, model: model, localURL: localURL)
+        }
+        let text = transcription.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { throw ServiceError.message("No speech was detected. Check your microphone and try again.") }
+        recordKeySuccess(account: connection == nil ? provider.rawValue : "s2t", using: key)
+        return text
+    }
+    var selectedLocalRuntimeIsRepairing: Bool {
+        guard localModels.isRepairing else { return false }
+        let speech = !speechUsesCredits && transcriptionProvider == .local &&
+            localTranscriptionURL == LocalModels.managedEndpoint && !localTranscriptionModel.hasPrefix("apple-speech-")
+        let cleanup = mode != .verbatim && !cleanupUsesCredits && processingProvider == .local &&
+            localProcessingURL == LocalModels.managedEndpoint
+        return speech || cleanup
+    }
+
+    var canRecord: Bool {
+        guard !selectedLocalRuntimeIsRepairing else { return false }
+        guard !isPreservingRecording else { return false }
+        let speechReady: Bool
+        if speechUsesCredits {
+            speechReady = creditConnection != nil
+        } else {
+            speechReady = transcriptionProvider == .local
+                ? (try? LocalEndpoint.url(localTranscriptionURL)) != nil && TranscriptionProvider.local.validModelID(localTranscriptionModel)
+                : !transcriptionKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+        guard speechReady else { return false }
+        if mode == .verbatim { return true }
+        if cleanupUsesCredits { return creditConnection != nil }
+        guard let provider = processingProvider else { return false }
+        switch provider {
+        case .local: return (try? LocalEndpoint.url(localProcessingURL)) != nil && provider.validModelID(processingModel)
+        case .codex: return provider.validModelID(processingModel)
+        case .openRouter, .xai: return !processingKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
     }
 
     var displayText: String { showOriginal ? rawTranscript : output }
@@ -524,390 +856,46 @@ enum DictationPhase: Equatable {
         }
     }
 
-    private func keyEdited(_ account: String) {
-        savedKeyAccounts.remove(account)
-        keyChecks[account]?.cancel()
-        keyChecks[account] = nil
-        keyRevisions[account] = UUID()
-        keyStatuses[account] = nil
-    }
-
-    func keyValue(_ account: String) -> String {
-        switch account {
-        case "elevenlabs": return elevenLabsKey
-        case "assemblyai": return assemblyKey
-        case "openrouter": return routerKey
-        case "cerebras": return cerebrasKey
-        default: return ""
-        }
-    }
-
-    func saveAPIKey(account: String) {
-        guard let provider = APIAccount(rawValue: account) else { return }
-        let value = keyValue(account).trimmingCharacters(in: .whitespacesAndNewlines)
-        switch provider {
-        case .elevenLabs: elevenLabsKey = value
-        case .assemblyAI: assemblyKey = value
-        case .openRouter: routerKey = value
-        case .cerebras: cerebrasKey = value
-        }
-        guard !value.isEmpty else {
-            keyStatuses[account] = .issue("Paste your \(provider.title) API key, then save.")
-            return
-        }
-        do {
-            if !isPreview { try Keychain.save(value, account: account) }
-            savedKeyAccounts.insert(account)
-            credentialsSaved = !transcriptionKey.isEmpty
-        } catch {
-            keyStatuses[account] = .issue("Could not save in Keychain. \(error.localizedDescription)")
-            return
-        }
-        let revision = UUID()
-        keyRevisions[account] = revision
-        keyStatuses[account] = .checking
-        keyChecks[account] = Task { [weak self, api] in
-            let status: APIKeyStatus
-            do {
-                try await api.validateKey(value, account: provider)
-                status = .accepted
-            } catch is CancellationError { return }
-            catch {
-                if case .account = error as? ServiceError {
-                    status = .issue(error.localizedDescription)
-                } else {
-                    status = .issue("Couldn't check the key. Check your connection or try saving again.")
-                }
-            }
-            guard !Task.isCancelled, let self, self.keyRevisions[account] == revision else { return }
-            self.keyStatuses[account] = status
-            self.keyChecks[account] = nil
-        }
-    }
-
-    @discardableResult func recordKeyFailure(_ error: Error, using value: String) -> Bool {
-        guard case .account(let account, _) = error as? ServiceError else { return false }
-        guard keyValue(account.rawValue).trimmingCharacters(in: .whitespacesAndNewlines) == value else { return true }
-        keyChecks[account.rawValue]?.cancel()
-        keyRevisions[account.rawValue] = UUID()
-        keyStatuses[account.rawValue] = .issue(error.localizedDescription)
-        return true
-    }
-
-    func recordKeySuccess(account: String, using value: String) {
-        guard keyValue(account).trimmingCharacters(in: .whitespacesAndNewlines) == value else { return }
-        keyChecks[account]?.cancel()
-        keyRevisions[account] = UUID()
-        keyStatuses[account] = .accepted
-    }
-
     func toggleRecording(prompt: Bool = false) {
+        guard !meetingRecordingActive else { notice = "Stop the meeting before starting dictation."; return }
+        guard !writingPromptDictationActive else {
+            notice = "Finish the editing request dictation first."
+            return
+        }
         if phase == .recording { if !prompt || sessionIsPrompt { stopRecording() }; return }
         guard !phase.busy else { return }
         stopShortcutTest?()
         guard !needsInstallation else { notice = setupSummary; return }
-        guard canRecord else { page = .connections; notice = "Configure the keys or local endpoint settings for your selected providers."; return }
-        if prompt {
-            guard promptModeEnabled else { notice = "Enable Prompt mode from its Experimental beta submenu first."; return }
-            guard PromptSpeechListener.permissionGranted, PromptScreenshot.permissionGranted else {
-                notice = "Set up Prompt mode permissions from its Experimental beta submenu first."; return
-            }
-            guard !routerKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-                notice = "Prompt mode needs your OpenRouter key to describe screenshots."; return
-            }
+        guard !isPreservingRecording else { notice = "Saving your previous recording. Try again when it has finished."; return }
+        guard !selectedLocalRuntimeIsRepairing else { notice = "The selected local model is being repaired. Wait for repair to finish or choose another provider."; return }
+        guard canRecord else { page = .connections; notice = "Add the key for your selected provider under API keys, or configure its local endpoint under Models."; return }
+        if prompt, let blocker = promptStartBlocker {
+            notice = blocker
+            promptStatus = blocker
+            return
         }
         startRecording(prompt: prompt)
     }
 
-    private func startRecording(prompt: Bool) {
-        sessionIsPrompt = prompt
-        promptListener.stop()
-        promptSession?.cancel()
-        promptSession = prompt && !isPreview ? PromptModeSession() : nil
-        promptSession?.onStatus = { [weak self] in self?.promptStatus = $0 }
-        dictionaryLearner.stop()
-        microphone.cancel()
-        hideTask?.cancel()
-        work?.cancel()
-        insertionTarget?.stopTracking()
-        insertionTarget = TextInsertion.captureTarget(previousApp: focusHistory.previousApp)
-        startTargetTask?.cancel()
-        let capturedTarget = insertionTarget
-        startTargetTask = pasteAtStart && !isPreview ? Task { await TextInsertion.rememberStart(capturedTarget) } : nil
-        pasteHint = nil
-        isWaitingToPaste = false
-        sessionMode = mode
-        sessionProvider = processingProvider
-        phase = .preparing
-        errorMessage = nil
-        notice = nil
-        copied = false
-        elapsed = 0
-        overlayVisible = true
-        work = Task { [self] in
-            let allowed = await AVCaptureDevice.requestAccess(for: .audio)
-            guard !Task.isCancelled else { return }
-            guard allowed else {
-                fail(ServiceError.message("Microphone access is off. Allow S2T in System Settings → Privacy & Security → Microphone."))
-                return
-            }
-            do {
-                if promptSession != nil {
-                    try await promptSession?.startRecording()
-                    try Task.checkCancellation()
-                    try promptListener.start(microphone: microphone, locale: promptLanguage, onReference: { [weak self] phrase, seconds in
-                        guard let self, self.phase == .recording else { return }
-                        self.promptStatus = "Reference heard. Recording context for final matching…"
-                    }, onFailure: { [weak self] in self?.promptSession?.recordWarning($0); self?.promptStatus = $0; self?.notice = $0 })
-                }
-                try await microphone.start(deviceUID: microphoneUID, liveSpeech: promptSession != nil)
-                guard !Task.isCancelled else { return }
-                startedAt = Date()
-                phase = .recording
-                if promptSession != nil { promptStatus = "Recording visual context · Experimental beta" }
-                connectionTask?.cancel()
-                if transcriptionProvider == .assemblyAI && transcriptionMode == .fast { connectionTask = Task { await api.warmTranscriptionConnection() } }
-                let timer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
-                    Task { @MainActor in
-                        guard let self, self.phase == .recording else { return }
-                        self.elapsed = Date().timeIntervalSince(self.startedAt)
-                        if self.elapsed >= 600 { self.stopRecording() }
-                    }
-                }
-                RunLoop.main.add(timer, forMode: .common)
-                meterTimer = timer
-            } catch {
-                guard !Task.isCancelled else { return }
-                promptListener.stop(); promptSession?.cancel(); fail(error)
-            }
-        }
+    /// Why a Prompt mode recording cannot start, or nil when it can.
+    var promptStartBlocker: String? {
+        guard promptModeEnabled else { return "Enable Prompt mode in Settings → Dictation first." }
+        guard PromptSpeechListener.permissionGranted else { return "Prompt mode needs Speech Recognition. Allow it under Settings → Dictation → Prompt mode." }
+        guard PromptScreenshot.permissionGranted else { return "Prompt mode needs Screen Recording. Allow S2T in System Settings → Privacy & Security → Screen & System Audio Recording, then reopen S2T." }
+        return nil
     }
 
-    private func stopRecording() {
-        guard phase == .recording else { return }
-        if let promptSession {
-            promptSession.stopListening()
-        } else { promptListener.stop() }
-        meterTimer?.invalidate(); meterTimer = nil
-        elapsed = Date().timeIntervalSince(startedAt)
-        phase = .transcribing
-        work = Task {
-            guard !Task.isCancelled else { return }
-            let captured = await microphone.finish()
-            guard !Task.isCancelled else { return }
-            promptSession?.setAudioOrigin(microphone.audioStartTime)
-            promptSession?.stopListening(words: Task { await promptListener.finish() })
-            guard elapsed >= 0.3, captured.count > 44 else {
-                promptSession?.cancel()
-                startTargetTask?.cancel()
-                insertionTarget?.stopTracking()
-                phase = .idle
-                overlayVisible = false
-                return
-            }
-            processRecording(captured)
-        }
-    }
 
-    func processRecording(_ captured: Data) {
-        guard processingProvider != nil else { page = .connections; notice = "Choose a text cleanup provider first."; return }
-        sessionMode = mode
-        sessionProvider = processingProvider
-        recording = captured
-        promptImages = []
-        rawTranscript = ""
-        output = ""
-        modelUsed = ""
-        showOriginal = false
-        runPipeline()
-    }
-
-    func retry() {
-        guard !phase.busy, recording != nil || !rawTranscript.isEmpty else { return }
-        guard processingProvider != nil else { page = .connections; notice = "Choose a text cleanup provider first."; return }
-        sessionMode = mode
-        sessionProvider = processingProvider
-        runPipeline()
-    }
-
-    var canRetry: Bool { phase == .failed && (recording != nil || !rawTranscript.isEmpty) }
-
-    private func runPipeline() {
-        work?.cancel()
-        hideTask?.cancel()
-        errorMessage = nil
-        notice = nil
-        overlayVisible = true
-        processingFailureModel = nil
-        let clipboardHistory = clipboardContextEnabled ? clipboardMonitor.snapshot() : ClipboardHistory()
-        let speechProvider = transcriptionProvider
-        let speechKey = transcriptionKey.trimmingCharacters(in: .whitespacesAndNewlines)
-        let speechModel = transcriptionModel
-        let speechMode = transcriptionMode
-        let speechURL = localTranscriptionURL
-        let cleanupURL = localProcessingURL
-        guard let provider = sessionProvider else { return }
-        let processingAPIKey = (provider.requiresAPIKey ? (provider == .openRouter ? routerKey : cerebrasKey) : "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let selectedMode = sessionMode
-        let model = processingModel.trimmingCharacters(in: .whitespacesAndNewlines)
-        let endpoint = processingEndpoint
-        let visualSession = promptSession
-        let visionModel = promptVisionModel
-        let visionProvider = promptVisionProvider
-        let visionURL = localVisionURL
-        let codexPath = codexExecutable
-        let cleanupOptions = codexOptions(model: model, vision: false)
-        let visionOptions = codexOptions(model: promptVisionModel, vision: true)
-        let visionKey = visionProvider == .openRouter ? routerKey.trimmingCharacters(in: .whitespacesAndNewlines) : ""
-        let trackedTarget = insertionTarget
-        phase = rawTranscript.isEmpty ? .transcribing : .processing
-        work = Task {
-            defer { trackedTarget?.stopTracking() }
-            do {
-                if rawTranscript.isEmpty, let recording {
-                    let transcriptionStarted = ProcessInfo.processInfo.systemUptime
-                    let transcription = try await api.transcribeDetailed(audio: recording, apiKey: speechKey, mode: speechMode, provider: speechProvider, model: speechModel, localURL: speechURL, includeTimestamps: visualSession != nil)
-                    try Task.checkCancellation()
-                    preferences.set(ProcessInfo.processInfo.systemUptime - transcriptionStarted, forKey: "lastTranscriptionSeconds")
-                    recordKeySuccess(account: speechProvider.rawValue, using: speechKey)
-                    rawTranscript = transcription.text
-                    output = transcription.text
-                    visualSession?.setTranscriptionWords(transcription.words)
-                }
-                let visualWork: Task<PromptModeSession.Result, Error>? = visualSession.map { session in
-                    let transcript = rawTranscript
-                    let directory = promptStorageDirectory.appendingPathComponent(session.id)
-                    return Task {
-                        let started = ProcessInfo.processInfo.systemUptime
-                        let result = try await session.describe(transcript: transcript, api: api, key: visionKey, model: visionModel, directory: directory, provider: visionProvider, localURL: visionURL, codexExecutable: codexPath, codexOptions: visionOptions, onVisionError: { [weak self] error in self?.recordKeyFailure(error, using: visionKey) ?? false })
-                        try Task.checkCancellation()
-                        preferences.set(ProcessInfo.processInfo.systemUptime - started, forKey: "lastPromptAnalysisSeconds")
-                        return result
-                    }
-                }
-                defer { visualWork?.cancel() }
-                if selectedMode != .verbatim {
-                    phase = .processing
-                    do {
-                        guard !provider.requiresAPIKey || !processingAPIKey.isEmpty else { throw ServiceError.message("Add your \(provider.title) API key in Settings, then retry processing.") }
-                        routeDescription = "Selected model"
-                        let processingStarted = ProcessInfo.processInfo.systemUptime
-                        let context = clipboardContextEnabled ? clipboardHistory.context(for: rawTranscript) : ClipboardContext()
-                        let processed = try await api.process(text: rawTranscript, mode: selectedMode, model: model, apiKey: processingAPIKey, provider: provider, endpoint: endpoint, clipboardContext: context, systemPrompt: isPreview ? nil : try Self.systemPromptFile.read() + Self.dictionaryFile.prompt(), localURL: cleanupURL, codexExecutable: codexPath, codexOptions: cleanupOptions)
-                        try Task.checkCancellation()
-                        preferences.set(ProcessInfo.processInfo.systemUptime - processingStarted, forKey: "lastProcessingSeconds")
-                        recordKeySuccess(account: provider.rawValue, using: processingAPIKey)
-                        output = processed.text
-                        modelUsed = processed.model + (processed.host.map { " · " + $0 } ?? "")
-                    } catch {
-                        try Task.checkCancellation()
-                        processingFailureModel = model
-                        output = rawTranscript
-                        modelUsed = speechProvider.title
-                        routeDescription = "Original transcription"
-                        if !recordKeyFailure(error, using: processingAPIKey) {
-                            errorMessage = "\(provider.title) processing failed. Using your original words. \(error.localizedDescription)"
-                        }
-                    }
-                } else {
-                    output = rawTranscript
-                    modelUsed = speechProvider.title
-                    routeDescription = "Original transcription"
-                }
-                try Task.checkCancellation()
-                if let visualSession, let visualWork {
-                    phase = .processing
-                    promptStatus = "Describing visual references…"
-                    let visual = try await withTaskCancellationHandler { try await visualWork.value } onCancel: { visualWork.cancel() }
-                    try Task.checkCancellation()
-                    promptImages = visual.images
-                    output = PromptReferenceText.append(to: output, session: visualSession.id, references: visual.references)
-                    promptStatus = visual.images.isEmpty ? "No reference screenshots available." : "\(visual.images.count) screenshots ready to paste with this prompt."
-                    if !visual.warnings.isEmpty { errorMessage = ([errorMessage].compactMap { $0 } + visual.warnings).joined(separator: "\n") }
-                    if !visual.images.isEmpty { notice = promptStatus }
-                }
-                try Task.checkCancellation()
-                if TextInsertion.menuIsOpen {
-                    isWaitingToPaste = true
-                    phase = .complete
-                    notice = "Close the menu to insert dictation at your cursor."
-                    hideOverlay(after: 0.35)
-                }
-                if let startTargetTask { insertionTarget = await startTargetTask.value }
-                try Task.checkCancellation()
-                let outcome: TextInsertion.Outcome = startTargetTask != nil && insertionTarget == nil ? .noTarget : try await insertText(output, insertionTarget ?? (isPreview ? nil : TextInsertion.captureTarget(previousApp: focusHistory.previousApp)))
-                try Task.checkCancellation()
-                let imageRecipient = isPreview ? nil : NSWorkspace.shared.frontmostApplication?.processIdentifier
-                isWaitingToPaste = false
-                preferences.set(outcome.rawValue, forKey: "lastInsertionOutcome")
-                preferences.set(Date(), forKey: "lastDeliveryAt")
-                copied = false
-                if outcome == .textSent {
-                    if visualSession != nil, !promptImages.isEmpty {
-                        phase = .processing
-                        promptStatus = "Pasting reference screenshots…"
-                        let attachmentStarted = ProcessInfo.processInfo.systemUptime
-                        let attachment = try await insertPromptImages(promptImages, imageRecipient, outputPasteboard)
-                        preferences.set(ProcessInfo.processInfo.systemUptime - attachmentStarted, forKey: "lastPromptAttachmentSeconds")
-                        try Task.checkCancellation()
-                        promptStatus = attachment.issue ?? "Sent \(attachment.sentCount) screenshots for attachment. If they don't appear, use Reference images."
-                        notice = promptStatus
-                        if outputPasteboard.changeCount == attachment.clipboardChange { copyText(output) }
-                    } else {
-                        copyText(output)
-                    }
-                    if !isPreview {
-                        dictionaryLearner.start(output: output, file: Self.dictionaryFile) { [weak self] error in
-                            self?.errorMessage = error
-                        }
-                    }
-                }
-                pasteHint = outcome.hint
-                if notice == "Close the menu to insert dictation at your cursor." { notice = nil }
-                if let hint = outcome.hint { notice = hint }
-                try Task.checkCancellation()
-                phase = .complete
-                if glowAppearance == .bezel { overlayVisible = true }
-                hideOverlay(after: pasteHint == nil ? (glowAppearance == .bezel ? 0.85 : 0.35) : 5)
-            } catch is CancellationError { }
-            catch {
-                guard !Task.isCancelled else { return }
-                if recordKeyFailure(error, using: speechKey) {
-                    phase = .failed
-                    hideOverlay(after: 2)
-                } else {
-                    fail(error)
-                }
-            }
-        }
-    }
-
-    var canCancel: Bool {
-        isWaitingToPaste || phase.busy || [.recording, .preview, .monitoring, .preparing].contains(phase)
-    }
-
-    func cancel() {
-        promptListener.stop()
-        promptSession?.cancel()
-        promptSession = nil
-        dictionaryLearner.stop()
-        isWaitingToPaste = false
-        startTargetTask?.cancel(); startTargetTask = nil
-        insertionTarget?.stopTracking(); insertionTarget = nil
-        work?.cancel(); hideTask?.cancel(); connectionTask?.cancel()
-        meterTimer?.invalidate(); meterTimer = nil
-        microphone.cancel()
-        phase = .idle
-        overlayVisible = false
-    }
+    lazy var localModels = LocalModels(preview: isPreview)
 
     func clearClipboardHistory() {
+        recentRecordings.clearClipboardContent(clipboardMonitor.snapshot().entries.map(\.text))
         clipboardMonitor.clear()
     }
 
     func copyResult() { copyText(displayText) }
 
-    private func copyText(_ text: String) {
+    func copyText(_ text: String) {
         guard !text.isEmpty else { return }
         copied = TextInsertion.copy(text, to: outputPasteboard)
         guard copied else { notice = "Couldn't copy the text. Use Copy to try again."; return }
@@ -929,6 +917,7 @@ enum DictationPhase: Equatable {
     }
 
     func testMicrophone() {
+        guard !meetingRecordingActive else { notice = "Stop the meeting before testing the microphone."; return }
         guard !needsInstallation else { notice = setupSummary; return }
         stopShortcutTest?()
         if phase == .monitoring { cancel(); return }
@@ -955,15 +944,19 @@ enum DictationPhase: Equatable {
         }
     }
 
-    private func fail(_ error: Error) {
-        startTargetTask?.cancel()
+    func fail(_ error: Error) {
+        promptRegionCapture.stop()
+        promptCaptureFeedback.hide()
         insertionTarget?.stopTracking()
         phase = .failed
-        errorMessage = error.localizedDescription
+        if recovery != nil {
+            let location = recoveryIsSaved && recoveryStore != nil ? "Your recording is saved on this Mac." : "Your recording is still in memory. Save it before quitting."
+            errorMessage = error.localizedDescription + "\n" + location + " Use Retry recording or Save recording."
+        } else { errorMessage = error.localizedDescription }
         hideOverlay(after: 2)
     }
 
-    private func hideOverlay(after seconds: Double) {
+    func hideOverlay(after seconds: Double) {
         hideTask?.cancel()
         hideTask = Task {
             try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))

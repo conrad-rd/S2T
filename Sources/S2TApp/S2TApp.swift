@@ -7,10 +7,238 @@ struct S2TMain {
     @MainActor static func main() {
         UserDefaults.standard.register(defaults: ["NSStatusItemSpacing": 0, "NSStatusItemSelectionPadding": 0])
         let app = NSApplication.shared
+        if CommandLine.arguments.contains("--verify-provider-visibility") {
+            app.setActivationPolicy(.prohibited)
+            Task { @MainActor in
+                do { try await ProviderVisibilityProbe.run(); exit(0) }
+                catch { fputs("Provider visibility: \(error.localizedDescription)\n", stderr); exit(1) }
+            }
+            app.run()
+            return
+        }
+        if CommandLine.arguments.contains("--verify-local-repair") {
+            app.setActivationPolicy(.prohibited)
+            Task { @MainActor in
+                do { try await LocalModelsProbe.repair(); exit(0) }
+                catch { fputs("Local repair: \(error.localizedDescription)\n", stderr); exit(1) }
+            }
+            app.run()
+            return
+        }
+        if CommandLine.arguments.contains("--verify-prompt-destination") {
+            app.setActivationPolicy(.prohibited)
+            Task { @MainActor in
+                do { try await PromptDestinationProbe.run(); exit(0) }
+                catch { fputs("Prompt destination: \(error.localizedDescription)\n", stderr); exit(1) }
+            }
+            app.run()
+            return
+        }
+        if CommandLine.arguments.contains("--verify-native-lifecycle") {
+            app.setActivationPolicy(.prohibited)
+            Task { @MainActor in
+                do { try await NativeLifecycleProbe.run(); exit(0) }
+                catch { fputs("Native lifecycle: \(error.localizedDescription)\n", stderr); exit(1) }
+            }
+            app.run()
+            return
+        }
+        if CommandLine.arguments.contains("--verify-native-state-regressions") {
+            app.setActivationPolicy(.prohibited)
+            Task { @MainActor in
+                do { try await NativeStateRegressionProbe.run(); exit(0) }
+                catch { fputs("Native state: \(error.localizedDescription)\n", stderr); exit(1) }
+            }
+            app.run()
+            return
+        }
+        if CommandLine.arguments.contains("--verify-early-transcription") {
+            app.setActivationPolicy(.prohibited)
+            Task { @MainActor in
+                do { try await EarlyTranscriptionProbe.run(); exit(0) }
+                catch { fputs("Early transcription: \(error.localizedDescription)\n", stderr); exit(1) }
+            }
+            app.run()
+            return
+        }
+        if CommandLine.arguments.contains("--verify-recent-recordings") {
+            app.setActivationPolicy(.prohibited)
+            do { try RecentRecordingsProbe.run(); exit(0) }
+            catch { fputs("Recent recordings: \(error.localizedDescription)\n", stderr); exit(1) }
+        }
+        if CommandLine.arguments.contains("--verify-meetings") {
+            app.setActivationPolicy(.prohibited)
+            Task { @MainActor in
+                do { try await MeetingProbe.run(); exit(0) }
+                catch { fputs("Meetings: \(error.localizedDescription)\n", stderr); exit(1) }
+            }
+            app.run()
+            return
+        }
+        if CommandLine.arguments.contains("--verify-dashboard") {
+            app.setActivationPolicy(.prohibited)
+            Task { @MainActor in
+                do { try await DashboardProbe.run(); exit(0) }
+                catch { fputs("Dashboard: \(error.localizedDescription)\n", stderr); exit(1) }
+            }
+            app.run()
+            return
+        }
+        if CommandLine.arguments.contains("--bench-suite") {
+            app.setActivationPolicy(.prohibited)
+            Task { @MainActor in
+                do { try await BenchmarkProbe.run(); exit(0) }
+                catch { fputs("Benchmark: \(error.localizedDescription)\n", stderr); exit(1) }
+            }
+            app.run()
+            return
+        }
+        if CommandLine.arguments.contains("--verify-appearance-startup") {
+            app.setActivationPolicy(.prohibited)
+            Task { @MainActor in
+                do { try await AppearanceStartupProbe.run(); exit(0) }
+                catch { fputs("Appearance startup: \(error.localizedDescription)\n", stderr); exit(1) }
+            }
+            app.run()
+            return
+        }
+        if CommandLine.arguments.contains("--verify-recording-startup") {
+            app.setActivationPolicy(.prohibited)
+            Task { @MainActor in
+                do { try await RecordingStartupProbe.run(); exit(0) }
+                catch { fputs("Recording startup: \(error.localizedDescription)\n", stderr); exit(1) }
+            }
+            app.run()
+            return
+        }
+        if CommandLine.arguments.contains("--verify-classic") {
+            app.setActivationPolicy(.prohibited)
+            do { try ClassicProbe.run() }
+            catch { fputs("Classic: \(error.localizedDescription)\n", stderr); exit(1) }
+            return
+        }
+        if CommandLine.arguments.contains("--verify-glass") {
+            app.setActivationPolicy(.prohibited)
+            do { try GlassWaveformProbe.run() }
+            catch { fputs("Liquid Glass: \(error.localizedDescription)\n", stderr); exit(1) }
+            return
+        }
+        if let flag = CommandLine.arguments.firstIndex(of: "--diagnose-input"), CommandLine.arguments.count > flag + 1,
+           let pid = pid_t(CommandLine.arguments[flag + 1]) {
+            app.setActivationPolicy(.prohibited)
+            let annotate = CommandLine.arguments.firstIndex(of: "--annotate").flatMap {
+                CommandLine.arguments.count > $0 + 1 ? URL(fileURLWithPath: CommandLine.arguments[$0 + 1]) : nil
+            }
+            let title = CommandLine.arguments.firstIndex(of: "--window").flatMap {
+                CommandLine.arguments.count > $0 + 1 ? CommandLine.arguments[$0 + 1] : nil
+            }
+            Task { @MainActor in await InputLiveProbe.run(pid: pid, windowTitle: title, annotate: annotate); exit(0) }
+            app.run()
+            return
+        }
+        if CommandLine.arguments.contains("--verify-input-universal") {
+            app.setActivationPolicy(.prohibited)
+            do { try InputUniversalProbe.run() }
+            catch { fputs("Universal input: \(error.localizedDescription)\n", stderr); exit(1) }
+            return
+        }
+        if CommandLine.arguments.contains("--verify-within-input") {
+            app.setActivationPolicy(.prohibited)
+            do { try WithinInputProbe.run() }
+            catch { fputs("Within Input: \(error.localizedDescription)\n", stderr); exit(1) }
+            return
+        }
+        if CommandLine.arguments.contains("--verify-window-bottom") {
+            app.setActivationPolicy(.prohibited)
+            Task { @MainActor in
+                do { try await WindowBottomProbe.run(); exit(0) }
+                catch { fputs("Window bottom: \(error.localizedDescription)\n", stderr); exit(1) }
+            }
+            app.run()
+            return
+        }
+        if CommandLine.arguments.contains("--verify-input-window") {
+            app.setActivationPolicy(.prohibited)
+            Task { @MainActor in
+                do { try await InputWindowFallbackProbe.run(); exit(0) }
+                catch { fputs("Input window fallback: \(error.localizedDescription)\n", stderr); exit(1) }
+            }
+            app.run()
+            return
+        }
+        if CommandLine.arguments.contains("--verify-input-resize-fields") {
+            app.setActivationPolicy(.prohibited)
+            do { try InputLatencyProbe.verifyResizedFields() }
+            catch { fputs("Input resize fields: \(error.localizedDescription)\n", stderr); exit(1) }
+            return
+        }
+        if CommandLine.arguments.contains("--verify-input-tracking") {
+            app.setActivationPolicy(.prohibited)
+            do { try InputTrackingProbe.run() }
+            catch { fputs("Input tracking: \(error.localizedDescription)\n", stderr); exit(1) }
+            return
+        }
+        if CommandLine.arguments.contains("--verify-input-motion") {
+            app.setActivationPolicy(.prohibited)
+            Task { @MainActor in
+                do { try await InputMotionProbe.run(); exit(0) }
+                catch { fputs("Input motion: \(error.localizedDescription)\n", stderr); exit(1) }
+            }
+            app.run()
+            return
+        }
+        if CommandLine.arguments.contains("--verify-window-shortcuts") {
+            app.setActivationPolicy(.prohibited)
+            do { try WindowShortcutProbe.run() }
+            catch { fputs("Window shortcuts: \(error.localizedDescription)\n", stderr); exit(1) }
+            return
+        }
+        if let index = CommandLine.arguments.firstIndex(of: "--verify-input-search"), CommandLine.arguments.count > index + 1 {
+            app.setActivationPolicy(.prohibited)
+            do { try InputSearchProbe.run(url: URL(fileURLWithPath: CommandLine.arguments[index + 1])) }
+            catch { fputs("Input search: \(error.localizedDescription)\n", stderr); exit(1) }
+            return
+        }
+        if let index = CommandLine.arguments.firstIndex(of: "--verify-input-browser"), CommandLine.arguments.count > index + 1 {
+            app.setActivationPolicy(.prohibited)
+            do { try InputBrowserPresetProbe.run(url: URL(fileURLWithPath: CommandLine.arguments[index + 1])) }
+            catch { fputs("Input browser preset: \(error.localizedDescription)\n", stderr); exit(1) }
+            return
+        }
+        if CommandLine.arguments.contains("--verify-input-contour") {
+            app.setActivationPolicy(.prohibited)
+            do { try InputContourProbe.run() }
+            catch { fputs("Input contour: \(error.localizedDescription)\n", stderr); exit(1) }
+            return
+        }
+        if CommandLine.arguments.contains("--verify-input-resize-performance") {
+            app.setActivationPolicy(.prohibited)
+            Task { @MainActor in
+                do { try await InputResizePerformanceProbe.run(); exit(0) }
+                catch { fputs("Input resize performance: \(error.localizedDescription)\n", stderr); exit(1) }
+            }
+            app.run()
+            return
+        }
+        if CommandLine.arguments.contains("--verify-input-latency") {
+            app.setActivationPolicy(.prohibited)
+            Task { @MainActor in
+                do { try await InputLatencyProbe.run(); exit(0) }
+                catch { fputs("Input latency: \(error.localizedDescription)\n", stderr); exit(1) }
+            }
+            app.run()
+            return
+        }
         if CommandLine.arguments.contains("--verify-glow-clarity") {
             app.setActivationPolicy(.prohibited)
             do { try GlowClarityProbe.run() }
             catch { fputs("Glow clarity: \(error.localizedDescription)\n", stderr); exit(1) }
+            return
+        }
+        if CommandLine.arguments.contains("--verify-custom-gradients") {
+            app.setActivationPolicy(.prohibited)
+            do { try GradientEditorProbe.run() }
+            catch { fputs("Custom gradients: \(error.localizedDescription)\n", stderr); exit(1) }
             return
         }
         if CommandLine.arguments.contains("--verify-gradient-cycle") {
@@ -19,10 +247,76 @@ struct S2TMain {
             catch { fputs("Gradient cycle: \(error.localizedDescription)\n", stderr); exit(1) }
             return
         }
+        if CommandLine.arguments.contains("--verify-native-speech") {
+            app.setActivationPolicy(.prohibited)
+            Task { @MainActor in
+                do { try await NativeSpeechProbe.run(); exit(0) }
+                catch { fputs("Native speech: \(error.localizedDescription)\n", stderr); exit(1) }
+            }
+            app.run()
+            return
+        }
+        if CommandLine.arguments.contains("--verify-local-runtime") {
+            app.setActivationPolicy(.prohibited)
+            Task { @MainActor in
+                do { try await LocalModelsProbe.runtime(); exit(0) }
+                catch { fputs("Local runtime: \(error.localizedDescription)\n", stderr); exit(1) }
+            }
+            app.run()
+            return
+        }
+        if CommandLine.arguments.contains("--verify-local-models") {
+            app.setActivationPolicy(.prohibited)
+            do { try LocalModelsProbe.run() }
+            catch { fputs("Local models: \(error.localizedDescription)\n", stderr); exit(1) }
+            return
+        }
+        if CommandLine.arguments.contains("--verify-writing") {
+            app.setActivationPolicy(.prohibited)
+            Task { @MainActor in
+                do { try await WritingPaneProbe.run(); exit(0) }
+                catch { fputs("Writing: \(error.localizedDescription)\n", stderr); exit(1) }
+            }
+            app.run()
+            return
+        }
         if CommandLine.arguments.contains("--verify-models-window") {
             app.setActivationPolicy(.prohibited)
             do { try ModelsWindowProbe.run() }
             catch { fputs("Models window: \(error.localizedDescription)\n", stderr); exit(1) }
+            return
+        }
+        if CommandLine.arguments.contains("--verify-settings-sidebar") {
+            app.setActivationPolicy(.prohibited)
+            do { try SettingsSidebarProbe.run() }
+            catch { fputs("Settings sidebar: \(error.localizedDescription)\n", stderr); exit(1) }
+            return
+        }
+        if let index = CommandLine.arguments.firstIndex(of: "--render-settings-pages"), CommandLine.arguments.count > index + 1 {
+            app.setActivationPolicy(.prohibited)
+            do { try SettingsPageRenderer.run(directory: CommandLine.arguments[index + 1]) }
+            catch { fputs("Settings pages: \(error.localizedDescription)\n", stderr); exit(1) }
+            exit(0)
+        }
+        if CommandLine.arguments.contains("--verify-settings-top-bar") {
+            app.setActivationPolicy(.prohibited)
+            do { try SettingsTopBarProbe.run() }
+            catch { fputs("Settings top bar: \(error.localizedDescription)\n", stderr); exit(1) }
+            return
+        }
+        if CommandLine.arguments.contains("--verify-appearance-selection") {
+            app.setActivationPolicy(.prohibited)
+            do { try AppearanceSelectionProbe.run() }
+            catch { fputs("Appearance selection: \(error.localizedDescription)\n", stderr); exit(1) }
+            return
+        }
+        if CommandLine.arguments.contains("--verify-appearance-live") {
+            app.setActivationPolicy(.prohibited)
+            Task { @MainActor in
+                do { try await AppearanceLiveProbe.run(); exit(0) }
+                catch { fputs("Live preview: \(error.localizedDescription)\n", stderr); exit(1) }
+            }
+            app.run()
             return
         }
         if CommandLine.arguments.contains("--verify-appearance-window") {
@@ -40,6 +334,12 @@ struct S2TMain {
             catch { fputs("Blur response: \(error.localizedDescription)\n", stderr); exit(1) }
             return
         }
+        if CommandLine.arguments.contains("--verify-glow-consistency") {
+            app.setActivationPolicy(.prohibited)
+            do { try GlowConsistencyProbe.run() }
+            catch { fputs("Glow consistency: \(error.localizedDescription)\n", stderr); exit(1) }
+            return
+        }
         if CommandLine.arguments.contains("--verify-brighter-edge") {
             app.setActivationPolicy(.prohibited)
             do { try BrighterEdgeProbe.run() }
@@ -50,6 +350,15 @@ struct S2TMain {
             app.setActivationPolicy(.prohibited)
             do { try WebsiteAnimationExport.run(wallpaper: URL(fileURLWithPath: CommandLine.arguments[index + 1]), directory: URL(fileURLWithPath: CommandLine.arguments[index + 2])) }
             catch { fputs("Website animation export: \(error.localizedDescription)\n", stderr); exit(1) }
+            return
+        }
+        if CommandLine.arguments.contains("--benchmark-selection") {
+            app.setActivationPolicy(.prohibited)
+            Task { @MainActor in
+                do { try await PromptCaptureFeedback.benchmarkSelectionLatency(); exit(0) }
+                catch { fputs("Selection timing: \(error.localizedDescription)\n", stderr); exit(1) }
+            }
+            app.run()
             return
         }
         if CommandLine.arguments.contains("--verify-prompt-mode") {
@@ -168,10 +477,59 @@ struct S2TMain {
             app.run()
             return
         }
+        if CommandLine.arguments.contains("--verify-jev") {
+            app.setActivationPolicy(.prohibited)
+            Task { @MainActor in
+                do { try await JevCleanupProbe.run(); exit(0) }
+                catch { fputs("Jev check: \(error.localizedDescription)\n", stderr); exit(1) }
+            }
+            app.run()
+            return
+        }
+        if CommandLine.arguments.contains("--verify-editing") {
+            app.setActivationPolicy(.prohibited)
+            Task { @MainActor in
+                do { try await EditingProbe.run(); exit(0) }
+                catch { fputs("Editing check: \(error.localizedDescription)\n", stderr); exit(1) }
+            }
+            app.run()
+            return
+        }
+        if let index = CommandLine.arguments.firstIndex(of: "--dictionary-editor-fixture"), CommandLine.arguments.count > index + 1 {
+            DictionaryObserverProbe.editor(directory: URL(fileURLWithPath: CommandLine.arguments[index + 1]))
+            return
+        }
+        if CommandLine.arguments.contains("--verify-dictionary-native") {
+            app.setActivationPolicy(.prohibited)
+            Task { @MainActor in
+                do { try await DictionaryObserverProbe.run(); exit(0) }
+                catch { fputs("Native dictionary check: \(error.localizedDescription)\n", stderr); exit(1) }
+            }
+            app.run()
+            return
+        }
+        if CommandLine.arguments.contains("--verify-dictionary") {
+            app.setActivationPolicy(.prohibited)
+            Task { @MainActor in
+                do { try await DictionaryProbe.run(); exit(0) }
+                catch { fputs("Dictionary check: \(error.localizedDescription)\n", stderr); exit(1) }
+            }
+            app.run()
+            return
+        }
         if CommandLine.arguments.contains("--verify-models") {
             app.setActivationPolicy(.prohibited)
             do { try ModelSettingsProbe.run() }
             catch { fputs("Model settings check: \(error.localizedDescription)\n", stderr); exit(1) }
+            return
+        }
+        if CommandLine.arguments.contains("--verify-public-benchmarks") {
+            app.setActivationPolicy(.prohibited)
+            Task { @MainActor in
+                do { try await BenchmarkFeedProbe.runPublic(); exit(0) }
+                catch { fputs("Public benchmarks: \(error.localizedDescription)\n", stderr); exit(1) }
+            }
+            app.run()
             return
         }
         if CommandLine.arguments.contains("--verify-api-keys") {
@@ -194,13 +552,44 @@ struct S2TMain {
             BackdropFixture.run(screenIndex: screen)
             return
         }
+        if CommandLine.arguments.contains("--verify-credits-http") {
+            app.setActivationPolicy(.prohibited)
+            Task {
+                do { try await CreditsProbe.runHTTP(); exit(0) }
+                catch { fputs("Credits HTTP verification failed: \(error.localizedDescription)\n", stderr); exit(1) }
+            }
+            app.run()
+            return
+        }
+        if CommandLine.arguments.contains(where: { ["--verify-live-streaming-billing", "--verify-streaming-lifecycle-http", "--verify-streaming-latency"].contains($0) }) {
+            fputs("Direct credit streaming has been retired. Use --verify-early-transcription to verify the recording path.\n", stderr)
+            exit(2)
+        }
+        if CommandLine.arguments.contains("--verify-assembly-streaming") {
+            app.setActivationPolicy(.prohibited)
+            do {
+                try Microphone.verifyStreamingAudio()
+                print("Assembly streaming microphone verification passed without microphone capture.")
+                exit(0)
+            } catch { fputs("Assembly streaming verification failed: \(error.localizedDescription)\n", stderr); exit(1) }
+        }
+        if CommandLine.arguments.contains("--verify-credits") {
+            app.setActivationPolicy(.prohibited)
+            Task {
+                do { try await CreditsProbe.run(); exit(0) }
+                catch { fputs("Credits verification failed: \(error.localizedDescription)\n", stderr); exit(1) }
+            }
+            app.run()
+            return
+        }
         if CommandLine.arguments.contains("--verify-build") {
             app.setActivationPolicy(.prohibited)
             let controller = MenuBarController(state: AppState(preview: true))
             controller.menuNeedsUpdate(controller.menu)
-            let setup = controller.menu.items.first { $0.identifier?.rawValue == "setup" }!.submenu!
-            controller.menuNeedsUpdate(setup)
-            let label = setup.items.first { $0.identifier?.rawValue == "app.version" }?.title
+            let setup = controller.menu.items.first { $0.identifier?.rawValue == "setup" }?.submenu
+            if let setup { controller.menuNeedsUpdate(setup) }
+            let label = setup?.items.first { $0.identifier?.rawValue == "app.version" }?.title
+                ?? DictationSettingsPane.buildLabel
             guard label == BuildIdentity.menuLabel,
                   Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String == BuildIdentity.number,
                   Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String == BuildIdentity.version else {
@@ -208,13 +597,26 @@ struct S2TMain {
                 exit(1)
             }
             print("\(BuildIdentity.menuLabel), built \(BuildIdentity.builtAt)")
-            print("\(Bundle.main.bundlePath)\nCompiled identity, packaged metadata, and menu label match.")
+            print("\(Bundle.main.bundlePath)\nCompiled identity, packaged metadata, and Settings label match.")
+            guard !controller.menu.items.contains(where: { $0.identifier?.rawValue == "policies" }) else {
+                fputs("Policies must be a settings link, not a menu command\n", stderr)
+                exit(1)
+            }
+            for slug in ["privacy", "terms", "refunds", "storage", "legal", "security"] {
+                guard let url = Bundle.main.url(forResource: slug, withExtension: "html", subdirectory: "policies"),
+                      let content = try? String(contentsOf: url, encoding: .utf8),
+                      content.contains("info@conrad-baulig.com"), !content.contains("<script") else {
+                    fputs("Packaged policy missing or unavailable: \(slug)\n", stderr)
+                    exit(1)
+                }
+            }
+            print("Six offline policy pages are available and the policies menu command is absent. No windows opened.")
             return
         }
-        if let index = CommandLine.arguments.firstIndex(of: "--verify-glow"), CommandLine.arguments.count > index + 1 {
+        if CommandLine.arguments.contains("--verify-glow") {
             app.setActivationPolicy(.accessory)
             Task { @MainActor in
-                do { try await GlowProbe.run(directory: URL(fileURLWithPath: CommandLine.arguments[index + 1])); exit(0) }
+                do { try await GlowProbe.run(directory: FileManager.default.temporaryDirectory); exit(0) }
                 catch { fputs("Glow check: \(error.localizedDescription)\n", stderr); exit(1) }
             }
             app.run()
@@ -305,6 +707,10 @@ struct S2TMain {
             catch { fputs("Preview rendering failed: \(error.localizedDescription)\n", stderr); exit(1) }
             return
         }
+        if CommandLine.arguments.dropFirst().contains(where: { $0.hasPrefix("--") }) {
+            fputs("Unknown or incomplete command; app startup refused.\n", stderr)
+            exit(2)
+        }
         if let identifier = Bundle.main.bundleIdentifier,
            let existing = NSRunningApplication.runningApplications(withBundleIdentifier: identifier).first(where: {
                $0.processIdentifier != ProcessInfo.processInfo.processIdentifier && !$0.isTerminated
@@ -327,6 +733,7 @@ struct S2TMain {
     private let shortcut = ActivationShortcut()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        NSApp.mainMenu = ApplicationMenu.make()
         menuBar = MenuBarController(state: state)
         glow = GlowWindowController(state: state)
         state.$overlayVisible.removeDuplicates().sink { [weak self] visible in
@@ -337,8 +744,23 @@ struct S2TMain {
             self.state.handleActivation(action)
             if !self.state.canRecord && (action == .start || action == .toggle) { self.menuBar?.showMenu() }
         }
+        let selection = state.promptSelectionBorder
+        shortcut.promptDragObserver = { point in selection.move(toQuartz: point) }
+        shortcut.onPromptPointer = { [weak self] type, event in
+            self?.state.handlePromptPointer(type: type, event: event) ?? false
+        }
+        state.$phase.sink { [weak self] phase in
+            guard let self else { return }
+            self.shortcut.capturesPromptPointer = self.state.sessionIsPrompt && phase == .recording
+        }.store(in: &subscriptions)
         shortcut.onPromptAction = { [weak self] action in
-            self?.state.handleActivation(action, prompt: true)
+            guard let self else { return }
+            let starting = self.state.phase != .recording && self.state.phase != .preparing && (action == .start || action == .toggle)
+            self.state.handleActivation(action, prompt: true)
+            // Show why Prompt mode could not start instead of silently doing nothing.
+            if starting, self.state.phase != .preparing, self.state.phase != .recording, self.state.promptStartBlocker != nil {
+                self.menuBar?.appearanceWindow.showPromptMode()
+            }
         }
         shortcut.isListening = { [weak self] in self?.state.phase == .recording || self?.state.phase == .preparing }
         shortcut.canCancel = { [weak self] in self?.state.canCancel == true }
@@ -389,10 +811,19 @@ struct S2TMain {
         return false
     }
 
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        Task {
+            if state.meetingRecordingActive { await state.meetings.stopAndWait() }
+            sender.reply(toApplicationShouldTerminate: await state.preserveForInterruption())
+        }
+        return .terminateLater
+    }
+
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
     func applicationWillTerminate(_ notification: Notification) {
         state.cancel()
         state.clipboardMonitor.stop()
+        state.localModels.stop()
         if !state.needsInstallation { shortcut.stop() }
     }
 }

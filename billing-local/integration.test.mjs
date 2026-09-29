@@ -41,7 +41,7 @@ test("HTTP purchase, key, metering, replay, ownership, CSRF and revocation", asy
     const request = { provider: "openrouter", operation: "cleanup", text: "Synthetic text." };
     const result = await (await post("/api/v1/requests", request, headers)).json();
     assert.equal(result.state, "settled");
-    assert.equal(result.chargedCredits, 0.01);
+    assert.equal(result.chargedCredits, 0.018);
     const replay = await (await post("/api/v1/requests", request, headers)).json();
     assert.equal(replay.id, result.id);
     assert.equal(replay.result.text, "Synthetic text.");
@@ -50,7 +50,7 @@ test("HTTP purchase, key, metering, replay, ownership, CSRF and revocation", asy
       400,
     );
     const after = await (await fetch(base + "/api/account", { headers: { cookie } })).json();
-    assert.equal(after.available, 499.99);
+    assert.equal(after.available, 499.982);
     assert.equal(after.reserved, 0);
     assert.equal((await post("/api/v1/requests", request)).status, 401);
     const other = instance.ledger.createSession().account;

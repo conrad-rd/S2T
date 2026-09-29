@@ -5,6 +5,7 @@ import CryptoKit
 
 @MainActor enum PerformanceProbe {
     static func run() {
+        if CommandLine.arguments.contains("--dictation") { DictationPerformanceProbe.run(); return }
         if CommandLine.arguments.contains("--fields") { fields(); return }
         var times: [Double] = []
         for index in 0..<65 {
@@ -59,7 +60,7 @@ import CryptoKit
                         let images = ChromaExpansion.images([assets.color, assets.edge], geometry: geometry,
                             size: size, factor: 0.3 + energy * 1.7)!
                         var exterior = Path(CGRect(origin: .zero, size: size))
-                        if case let .input(rect, radius, cornerStyle) = geometry { exterior.addPath(InputOutlineBackdrop(rect: rect, cornerRadius: radius, cornerStyle: cornerStyle).path) }
+                        if case let .input(contour) = geometry { exterior.addPath(InputOutlineBackdrop(contour: contour).path) }
                         let map = ChromaAppearance.radiusMap(geometry: geometry, size: size, distortion: distortion,
                             exterior: exterior, expansion: 0.3 + energy * 1.7)!
                         if index >= 4 { times.append((ProcessInfo.processInfo.systemUptime - start) * 1000) }

@@ -5,7 +5,7 @@ enum BezelSymbol: Equatable {
     case waveform, spinner, checkmark, failure
 
     static func resolve(phase: DictationPhase, waiting: Bool, deliveryHint: String?) -> Self {
-        if waiting || phase.busy { return .spinner }
+        if waiting || phase.processingAudio { return .spinner }
         if phase == .failed || (phase == .complete && deliveryHint != nil) { return .failure }
         return phase == .complete ? .checkmark : .waveform
     }
@@ -123,6 +123,7 @@ private final class BezelPanel: NSPanel {
 }
 
 @MainActor final class BezelIndicatorView: NSView {
+    var dragVelocity = CGVector.zero { didSet { needsDisplay = true } }
     var previewShape: BezelShape? { didSet { needsDisplay = true } }
     var side = BezelSide.right { didSet { needsDisplay = true } }
     private(set) var form = BezelForm.hidden
@@ -187,6 +188,35 @@ private final class BezelPanel: NSPanel {
         let center = shape.symbolCenter
         context.translateBy(x: center.x, y: center.y)
         context.setAlpha(min(1, max(0, (min(form.depth, form.body) - 0.55) / 0.45)))
+        let speed = reducedMotion ? 0 : min(1, hypot(dragVelocity.dx, dragVelocity.dy) / 1000)
+        if previewShape != nil, speed > 0.04 {
+            drawBlurredSymbol(in: context, speed: speed)
+        } else { drawSymbol(in: context) }
+    }
+
+    private func drawBlurredSymbol(in context: CGContext, speed: Double) {
+        let magnitude = hypot(dragVelocity.dx, dragVelocity.dy)
+        let direction = CGVector(dx: dragVelocity.dx / magnitude, dy: dragVelocity.dy / magnitude)
+        let opacity = min(1, max(0, (min(form.depth, form.body) - 0.55) / 0.45))
+        context.saveGState()
+        context.setBlendMode(.plusLighter)
+        for along in -7...7 {
+            let travel = Double(along) / 7 * speed * 11
+            for across in -2...2 {
+                let softness = Double(across) * speed * 1.2
+                let weight = exp(-Double(across * across) / 2) / (15 * 2.4837318859)
+                context.saveGState()
+                context.translateBy(x: direction.dx * travel - direction.dy * softness,
+                                    y: direction.dy * travel + direction.dx * softness)
+                context.setAlpha(opacity * weight)
+                drawSymbol(in: context)
+                context.restoreGState()
+            }
+        }
+        context.restoreGState()
+    }
+
+    private func drawSymbol(in context: CGContext) {
         context.setStrokeColor(NSColor.white.cgColor)
         context.setFillColor(NSColor.white.cgColor)
         context.setLineCap(.round)

@@ -22,6 +22,10 @@ public enum InputTargetPreset: String, CaseIterable, Sendable {
         }
     }
 
+    public static func identifiesT3Composer(classes: [String]) -> Bool {
+        classes.count <= 256 && classes.contains("@container/composer-surface") && classes.contains("group/composer-surface")
+    }
+
     public static func match(bundleID: String, webURL: URL?, inWebContent: Bool) -> Self? {
         if inWebContent {
             if let url = webURL, ["https", "http"].contains(url.scheme?.lowercased() ?? ""),
@@ -71,7 +75,8 @@ public enum InputTargetPreset: String, CaseIterable, Sendable {
         case .whatsApp: return (8, 2.5, 24)
         case .telegram: return (6, 2.5, 18)
         case .messages: return (4, 2, 18)
-        case .t3Code, .codex: return (6, 5, 16)
+        case .t3Code: return (6, 5, 22)
+        case .codex: return (6, 5, 16)
         case .gemini: return (10, 4, 28)
         case .google: return (8, 2, 28)
         case .safari: return (0, 0, 10)
@@ -86,7 +91,12 @@ public enum InputTargetPreset: String, CaseIterable, Sendable {
               InputOutlineGeometry.isInput(role: leaf.role, subrole: leaf.subrole, editable: leaf.editable),
               let input = leaf.frame, valid(input) else { return nil }
         if self == .terminal { return nil }
-        if self == .safari || self == .x { return target(input) }
+        if self == .safari {
+            return ComposerTargeting.resolveTarget(editor: editor, nodes: nodes)
+        }
+        if self == .x {
+            return ComposerAttachments.attachingBars(to: target(input), boundary: editor, nodes: nodes, unit: min(input.height, 28))
+        }
         var path: Set<Int> = [editor]
         var ancestors = [ComposerNode]()
         var parent = leaf.parent
@@ -106,12 +116,14 @@ public enum InputTargetPreset: String, CaseIterable, Sendable {
             guard !controls.isEmpty || paddedNativeField || searchBoundary else { continue }
             let capsule = [.chatGPT, .gemini, .google].contains(self)
                 && InputOutlineGeometry.isCapsule(field: bounds, editor: input, role: leaf.role, controls: controls)
-            let referenceControl: CGFloat = self == .chatGPT ? 30 : self == .gemini ? 29 : 28
+            let referenceControl: CGFloat = self == .chatGPT ? 30 : self == .gemini ? 29 : self == .t3Code ? 32 : 28
             // Preset radii are in layout units. Buttons retain their size when editor text wraps.
             let icons = controls.filter { $0.width >= $0.height * 0.75 && $0.width <= $0.height * 1.5 }
             let dimensions = (icons.isEmpty ? controls : icons).map { min($0.width, $0.height) }.filter { $0 > 0 }.sorted()
-            let scale = dimensions.isEmpty ? 1 : dimensions[(dimensions.count - 1) / 2] / referenceControl
-            return target(bounds, capsule: capsule, scale: scale)
+            let controlSize = self == .t3Code ? dimensions.last : dimensions.isEmpty ? nil : dimensions[(dimensions.count - 1) / 2]
+            let scale = controlSize.map { $0 / referenceControl } ?? 1
+            let body = target(bounds, capsule: capsule, scale: scale)
+            return ComposerAttachments.attachingBars(to: body, boundary: node.id, nodes: nodes, unit: referenceControl * scale)
         }
         return nil
     }

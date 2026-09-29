@@ -2,7 +2,7 @@ import Foundation
 
 public enum GlowColorCycle {
     public static let duration = 10.0
-    private static let colors = [SIMD3<Double>(142, 0, 255), SIMD3<Double>(0, 93, 255),
+    public static let colors = [SIMD3<Double>(142, 0, 255), SIMD3<Double>(0, 93, 255),
                                  SIMD3<Double>(253, 90, 189), SIMD3<Double>(255, 0, 250)]
 
     public static func color(position: Double, time: Double) -> SIMD3<Double> {

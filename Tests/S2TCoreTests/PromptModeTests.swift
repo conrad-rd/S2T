@@ -2,9 +2,6 @@ import XCTest
 @testable import S2TCore
 
 final class PromptModeTests: XCTestCase {
-    private var visionMetadata: ScriptedTransport.Response {
-        .init(path: "/api/v1/models/vendor/vision/endpoints", status: 200, json: #"{"data":{"architecture":{"input_modalities":["text","image"],"output_modalities":["text"]}}}"#)
-    }
     func testNaturalReferencesFromReportedPrompt() {
         let text = "I want the processing animation, like here, or like here, or like here. For the bezel, zoomed in here, and for the notch, zoomed in here showing the notch. This tab here, keep the logo."
         XCTAssertEqual(PromptReferenceDetector.matches(text).count, 6)
@@ -53,55 +50,63 @@ final class PromptModeTests: XCTestCase {
         XCTAssertEqual(PromptCaptureGeometry.region(pointer: .zero, display: CGRect(x: 0, y: 0, width: 500, height: 400)).size, CGSize(width: 500, height: 400))
     }
 
-    func testVisionUsesSeparateModelAndNoCleanupHost() async throws {
-        let transport = ScriptedTransport([visionMetadata, .init(path: "/api/v1/chat/completions", status: 200, json: #"{"choices":[{"finish_reason":"stop","message":{"content":"{\"description\":\"A blue button next to Save.\",\"needs_image\":true}"}}]}"#)])
-        let result = try await DictationAPI(transport: transport).describePromptImage(png: Data([1, 2, 3]), transcript: "match this design", pointer: CGPoint(x: 20, y: 30), model: "vendor/vision", apiKey: "fixture")
-        XCTAssertEqual(result.description, "A blue button next to Save.")
-        let requests = await transport.requests
-        XCTAssertEqual(requests[0].httpMethod, "GET")
-        XCTAssertNil(requests[0].value(forHTTPHeaderField: "Authorization"))
-        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: requests[1].httpBody!) as? [String: Any])
-        XCTAssertEqual(body["model"] as? String, "vendor/vision")
-        XCTAssertNil(body["provider"])
-        XCTAssertEqual(requests[1].value(forHTTPHeaderField: "Authorization"), "Bearer fixture")
-        XCTAssertTrue(String(data: requests[1].httpBody!, encoding: .utf8)!.contains("data:image/png;base64,AQID"))
+
+
+
+
+
+
+    func testScreenshotMentionsStayBetweenTheirSpokenReferenceAndFollowingWords() {
+        let source = PromptReferenceText(transcript: "Make this like here, and that like here. Keep the footer.", session: "abc123")
+        let references: [PromptReferenceText.Reference] = [
+            .init(number: 1, seconds: 2.5, description: "Blue Save button", imageName: "abc123-reference-1.png", cueIndex: 0),
+            .init(number: 2, seconds: 3.5, description: "Sidebar", imageName: "abc123-reference-2.png", cueIndex: 1)
+        ]
+        XCTAssertEqual(source.resolve(source.text, references: references),
+                       "Make this like here [attached screenshot: [1]], and that like here [attached screenshot: [2]]. Keep the footer.")
+        XCTAssertEqual(source.resolve(source.text.replacingOccurrences(of: "Make this", with: "Change this"), references: references),
+                       "Change this like here [attached screenshot: [1]], and that like here [attached screenshot: [2]]. Keep the footer.")
+        XCTAssertEqual(source.resolve(source.text, references: []), "Make this like here, and that like here. Keep the footer.")
     }
 
-    func testVisionAcceptsDescriptionWithoutAnImageDecision() async throws {
-        let transport = ScriptedTransport([visionMetadata, .init(path: "/api/v1/chat/completions", status: 200, json: #"{"choices":[{"finish_reason":"stop","message":{"content":"{\"description\":\"The nearby settings panel has uneven row spacing.\"}"}}]}"#)])
-        let result = try await DictationAPI(transport: transport).describePromptImage(png: Data([1]), transcript: "The spacing in this area needs fixing, look here.", pointer: CGPoint(x: 400, y: 300), model: "vendor/vision", apiKey: "fixture")
-        XCTAssertEqual(result.description, "The nearby settings panel has uneven row spacing.")
-        let requests = await transport.requests
-        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: requests[1].httpBody!) as? [String: Any])
-        let messages = try XCTUnwrap(body["messages"] as? [[String: Any]])
-        let instructions = try XCTUnwrap(messages.first?["content"] as? String)
-        XCTAssertTrue(instructions.contains("entire screenshot"))
-        XCTAssertTrue(instructions.contains("1–2 short sentences"))
-        XCTAssertTrue(instructions.contains("ambiguous"))
-        XCTAssertFalse(instructions.contains("needs_image"))
-        XCTAssertLessThanOrEqual(try XCTUnwrap(body["max_tokens"] as? Int), 500)
+    func testMissingFirstScreenshotDoesNotMoveSecondMentionToFirstCue() {
+        let source = PromptReferenceText(transcript: "Look here for the header, and here for the sidebar. Keep the colors.", session: "test")
+        let references: [PromptReferenceText.Reference] = [
+            .init(number: 1, seconds: 3, description: "Sidebar", imageName: "1.png", cueIndex: 1),
+            .init(number: 2, seconds: -1, description: "Manual crop", imageName: "2.png")
+        ]
+        XCTAssertEqual(source.resolve(source.text, references: references),
+                       "Look here for the header, and here [attached screenshot: [1]] for the sidebar. Keep the colors.")
+        let silent = PromptReferenceText(transcript: "", session: "test")
+        XCTAssertEqual(silent.resolve(silent.text, references: references), "[attached screenshot: [1]]\n[attached screenshot: [2]]")
     }
 
-    func testTextOnlyModelRejectedBeforeAnyImageOrKeyIsSent() async throws {
-        let transport = ScriptedTransport([.init(path: "/api/v1/models/openai/gpt-oss-120b/endpoints", status: 200, json: #"{"data":{"architecture":{"input_modalities":["text"],"output_modalities":["text"]}}}"#)])
-        do {
-            _ = try await DictationAPI(transport: transport).describePromptImage(png: Data([1, 2, 3]), transcript: "look here", pointer: .zero, model: "openai/gpt-oss-120b", apiKey: "fixture")
-            XCTFail("Text-only model accepted an image")
-        } catch {
-            XCTAssertTrue(error.localizedDescription.contains("cannot describe screenshots"))
+    func testInlineMarkersPreserveUnicodePunctuationAndNegativeReferences() {
+        let transcript = "İ 👩🏽‍💻 Schau mal hier, dann LOOK HERE! Don't look here. Nicht hier. Keep it."
+        let source = PromptReferenceText(transcript: transcript, session: "unicode")
+        let references = (0..<2).map {
+            PromptReferenceText.Reference(number: $0 + 1, seconds: Double($0), description: "", imageName: nil, cueIndex: $0)
         }
-        let requests = await transport.requests
-        XCTAssertEqual(requests.count, 1)
-        XCTAssertNil(requests[0].httpBody)
-        XCTAssertNil(requests[0].value(forHTTPHeaderField: "Authorization"))
+        XCTAssertEqual(source.resolve(source.text, references: references),
+                       "İ 👩🏽‍💻 Schau mal hier [attached screenshot: [1]], dann LOOK HERE [attached screenshot: [2]]! Don't look here. Nicht hier. Keep it.")
+        XCTAssertEqual(source.resolve(source.text, references: []), transcript)
     }
 
-    func testDescriptionsCannotLoseSessionAssociation() {
-        let text = PromptReferenceText.append(to: "Change this.", session: "abc123", references: [.init(number: 1, seconds: 2.5, description: "Blue Save button", imageName: "abc123-reference-1.png")])
-        XCTAssertTrue(text.contains("Prompt set abc123"))
-        XCTAssertTrue(text.contains("2.5s"))
-        XCTAssertTrue(text.contains("abc123-reference-1.png"))
-        XCTAssertTrue(text.contains("Blue Save button"))
-        XCTAssertFalse(text.contains("is attached"))
+    func testCleanupRequestContainsInlineMarkersAndPreservationRuleWithCustomInstructions() throws {
+        let source = PromptReferenceText(transcript: "Look here. Keep the footer.", session: "test")
+        for mode in [WritingMode.clean, .notes, .email] {
+            let request = try DictationEditingRequest(text: source.text, mode: mode, instructions: "Use short sentences.", clipboardContext: ClipboardContext())
+            let payload = try JSONDecoder().decode([String: String].self, from: Data(request.source.utf8))
+            XCTAssertEqual(payload["dictated_text"], "Look here __S2T_SCREENSHOT_test_0__. Keep the footer.")
+            XCTAssertTrue(request.instructions.contains(PromptReferenceText.editingInstruction))
+            XCTAssertTrue(request.instructions.contains("Use short sentences."))
+        }
+        let ordinary = try DictationEditingRequest(text: "Keep the footer.", mode: .clean, instructions: nil, clipboardContext: ClipboardContext())
+        XCTAssertFalse(ordinary.instructions.contains(PromptReferenceText.editingInstruction))
+    }
+
+    func testRecoveredCleanupWithoutItsScreenSessionDoesNotPasteInternalMarkers() {
+        let source = PromptReferenceText(transcript: "Look here. Keep this here too.", session: "a1b2c3d4e5f6")
+        XCTAssertEqual(PromptReferenceText.removingMarkers(from: source.text), "Look here. Keep this here too.")
     }
 }

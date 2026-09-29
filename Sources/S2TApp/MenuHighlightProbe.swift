@@ -1,9 +1,10 @@
 import AppKit
+import S2TCore
 
 @MainActor enum MenuHighlightProbe {
     static func run() throws {
         let state = AppState(preview: true)
-        let controller = MenuBarController(state: state)
+        let controller = MenuBarController(state: state, presentsAppearanceWindow: false)
         defer { NSStatusBar.system.removeStatusItem(controller.statusItem) }
         guard controller.statusItem.length == 24,
               let button = controller.statusItem.button,
@@ -19,7 +20,10 @@ import AppKit
         guard controller.statusItem.length == 24 else { throw failure("Status refresh restored extra padding") }
         print("PASS: 24-point status item, unchanged logo size and disabled image scaling.")
         controller.menuNeedsUpdate(controller.menu)
-        let iconRows = ["setup", "dictation.toggle", "dictation.cancel", "result", "clipboard.history", "prompt", "dictation", "appearance", "notice", "quit"]
+        let iconRows = ["appearance.styles", "result.copy", "result.retry", "appearance", "quit"]
+        guard controller.menu.items.compactMap({ $0.identifier?.rawValue }) == iconRows else {
+            throw failure("The menu must contain only Appearance, Copy last dictation, Retry last dictation, Settings, and Quit")
+        }
         for id in iconRows {
             guard let item = controller.menu.items.first(where: { $0.identifier?.rawValue == id }),
                   let title = item.attributedTitle,
@@ -53,13 +57,12 @@ import AppKit
             }
         }
         print("PASS: 200 intensity updates kept root titles unchanged with one icon each in \(String(format: "%.3f", CFAbsoluteTimeGetCurrent() - started)) seconds.")
-        state.phase = .recording
+        state.output = "A completed dictation"
         controller.refreshStatus()
-        guard controller.menu.items.first(where: { $0.identifier?.rawValue == "dictation.toggle" })?.attributedTitle?.string == "\u{fffc}  Finish dictation" else {
-            throw failure("Dynamic command title did not update")
+        guard controller.menu.items.first(where: { $0.identifier?.rawValue == "result.copy" })?.isEnabled == true,
+              controller.menu.items.first(where: { $0.identifier?.rawValue == "result.retry" })?.isEnabled == false else {
+            throw failure("Copy and retry availability did not follow the last dictation")
         }
-        state.phase = .idle
-        controller.refreshStatus()
         var actions = 0
         var submenus = 0
         func verify(_ menu: NSMenu) throws {
@@ -81,7 +84,9 @@ import AppKit
             }
         }
         try verify(controller.menu)
-        guard actions > 20, submenus > 8 else { throw failure("Menu coverage is incomplete") }
+        guard actions == GlowAppearance.selectableCases.count + 4, submenus == 1 else {
+            throw failure("Extra menu actions or submenus remain")
+        }
         var calls = 0
         let selected = ActionMenuItem(title: "Selected setting") { calls += 1 }
         selected.state = .on
@@ -89,12 +94,13 @@ import AppKit
         selected.isEnabled = false
         selected.invoke()
         guard calls == 1, selected.state == .on else { throw failure("Native action enablement or checkmark failed") }
-        state.phase = .complete
-        controller.refreshStatus()
-        guard controller.menu.items.first(where: { $0.identifier?.rawValue == "status.phase" })?.isHidden == true else {
-            throw failure("Completion caption must remain hidden")
+        let settings = controller.appearanceWindow
+        settings.showDictation()
+        guard settings.showingDictation, settings.sidebar.table.selectedRow == settings.sidebar.dictationRow,
+              settings.dictationPane.superview != nil, settings.sidebar.table.numberOfRows == 7 else {
+            throw failure("Removed menu controls are not reachable in Dictation settings")
         }
-        print("PASS: \(actions) native actions and \(submenus) native submenus, native root SF Symbol text attachments, action dispatch, disabled actions and independent checkmarks.")
+        print("PASS: five native menu entries, Appearance submenu, Copy and Retry availability, Dictation settings navigation, and root SF Symbol attachments.")
         print("No menus opened, real actions invoked, or screen pixels captured.")
     }
 

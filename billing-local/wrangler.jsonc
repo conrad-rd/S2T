@@ -1,0 +1,40 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "s2t-credits",
+  "main": "cloudflare/worker.mjs",
+  "compatibility_date": "2026-09-16",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "workers_dev": true,
+  "preview_urls": false,
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "run_worker_first": true
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "CREDITS",
+        "class_name": "CreditsLedger"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": [
+        "CreditsLedger"
+      ]
+    }
+  ],
+  "vars": {
+    "S2T_BILLING_MODE": "demo",
+    "S2T_PUBLIC_ORIGIN": "http://localhost:8787",
+    "S2T_PRICING_JSON": "{\"version\":\"s2t-security-candidate-2026-09-29\",\"expires\":null,\"routes\":{\"openrouter:cleanup\":{\"model\":\"openai/gpt-oss-120b\",\"host\":\"cerebras/fp16\",\"inputMicrosPerToken\":1,\"outputMicrosPerToken\":2,\"maxOutputTokens\":2048,\"maxInputBytes\":16000,\"maxRequestMicros\":50000,\"feeBps\":550,\"title\":\"GPT-OSS 120B\",\"alternatives\":[{\"model\":\"meta/muse-spark-1.3-contributor\",\"inputMicrosPerToken\":1,\"outputMicrosPerToken\":2,\"maxOutputTokens\":2048,\"maxInputBytes\":16000,\"maxRequestMicros\":50000,\"feeBps\":550,\"title\":\"Muse Spark Contributor\",\"requiresDataCollection\":true},{\"model\":\"openai/gpt-oss-20b\",\"inputMicrosPerToken\":1,\"outputMicrosPerToken\":2,\"maxOutputTokens\":2048,\"maxInputBytes\":16000,\"maxRequestMicros\":50000,\"feeBps\":550,\"title\":\"GPT-OSS 20B\"}]},\"assemblyai:transcription\":{\"model\":\"universal-3-5-pro\",\"microsPerSecond\":125,\"maxSeconds\":120,\"maxRequestMicros\":20000,\"feeBps\":0},\"openrouter:transcription\":{\"model\":\"openai/whisper-large-v3-turbo\",\"title\":\"Whisper V3 Turbo\",\"microsPerSecond\":125,\"maxSeconds\":120,\"maxRequestMicros\":20000,\"feeBps\":0,\"alternatives\":[{\"model\":\"openai/whisper-large-v3\",\"title\":\"Whisper V3\",\"microsPerSecond\":125,\"maxSeconds\":120,\"maxRequestMicros\":20000,\"feeBps\":0,\"minimumBillableSeconds\":10},{\"model\":\"openai/whisper-1\",\"title\":\"Whisper 1\",\"microsPerSecond\":125,\"maxSeconds\":120,\"maxRequestMicros\":20000,\"feeBps\":0},{\"model\":\"nvidia/parakeet-tdt-0.6b-v3\",\"title\":\"Parakeet TDT 0.6B v3\",\"microsPerSecond\":125,\"maxSeconds\":120,\"maxRequestMicros\":20000,\"feeBps\":0},{\"model\":\"meta/muse-voice-transcribe-1.0\",\"title\":\"Meta: Muse Voice Transcribe 1.0\",\"maxSeconds\":120,\"maxRequestMicros\":20000,\"feeBps\":0,\"microsPerSecond\":125},{\"model\":\"microsoft/mai-transcribe-2\",\"title\":\"Microsoft AI: MAI-Transcribe 2\",\"maxSeconds\":120,\"maxRequestMicros\":20000,\"feeBps\":0,\"microsPerSecond\":125},{\"model\":\"nvidia/nemotron-3.5-asr-streaming-multilingual-0.6b\",\"title\":\"NVIDIA: Nemotron 3.5 ASR Streaming Multilingual 0.6B\",\"maxSeconds\":120,\"maxRequestMicros\":20000,\"feeBps\":0,\"microsPerSecond\":125},{\"model\":\"mistralai/voxtral-small-24b-2507-stt\",\"title\":\"Mistral: Voxtral Small 24B 2507 STT\",\"maxSeconds\":120,\"maxRequestMicros\":20000,\"feeBps\":0,\"microsPerSecond\":125},{\"model\":\"mistralai/voxtral-mini-3b-2507\",\"title\":\"Mistral: Voxtral Mini 3B 2507\",\"maxSeconds\":120,\"maxRequestMicros\":20000,\"feeBps\":0,\"microsPerSecond\":125},{\"model\":\"qwen/qwen3-asr-1.7b\",\"title\":\"Qwen: Qwen3 ASR 1.7B\",\"maxSeconds\":120,\"maxRequestMicros\":20000,\"feeBps\":0,\"microsPerSecond\":125},{\"model\":\"qwen/qwen3-asr-0.6b\",\"title\":\"Qwen: Qwen3 ASR 0.6B\",\"maxSeconds\":120,\"maxRequestMicros\":20000,\"feeBps\":0,\"microsPerSecond\":125},{\"model\":\"openai/gpt-transcribe\",\"title\":\"OpenAI: GPT Transcribe\",\"maxSeconds\":120,\"maxRequestMicros\":20000,\"feeBps\":0,\"microsPerSecond\":125},{\"model\":\"fish-audio/transcribe-1\",\"title\":\"Fish Audio: Transcribe 1\",\"maxSeconds\":120,\"maxRequestMicros\":20000,\"feeBps\":0,\"microsPerSecond\":125},{\"model\":\"x-ai/grok-stt-1.0\",\"title\":\"SpaceXAI: Grok STT 1.0\",\"maxSeconds\":120,\"maxRequestMicros\":20000,\"feeBps\":0,\"microsPerSecond\":125},{\"model\":\"deepgram/nova-3\",\"title\":\"Deepgram: Nova-3\",\"maxSeconds\":120,\"maxRequestMicros\":20000,\"feeBps\":0,\"microsPerSecond\":125},{\"model\":\"microsoft/mai-transcribe-1.5\",\"title\":\"Microsoft AI: MAI-Transcribe 1.5\",\"maxSeconds\":120,\"maxRequestMicros\":20000,\"feeBps\":0,\"microsPerSecond\":125},{\"model\":\"mistralai/voxtral-mini-transcribe\",\"title\":\"Mistral: Voxtral Mini Transcribe\",\"maxSeconds\":120,\"maxRequestMicros\":20000,\"feeBps\":0,\"microsPerSecond\":125},{\"model\":\"qwen/qwen3-asr-flash-2026-02-10\",\"title\":\"Qwen: Qwen3 ASR Flash\",\"maxSeconds\":120,\"maxRequestMicros\":20000,\"feeBps\":0,\"microsPerSecond\":125},{\"model\":\"google/chirp-3\",\"title\":\"Google: Chirp 3\",\"maxSeconds\":120,\"maxRequestMicros\":40080,\"feeBps\":0,\"microsPerSecond\":334}],\"minimumBillableSeconds\":10},\"openrouter:decisions\":{\"model\":\"typesafe/jev-1.13\",\"title\":\"Jev 1.13\",\"inputMicrosPerThousandTokens\":42,\"maxInputBytes\":65536,\"maxRequestMicros\":3000,\"feeBps\":550}}}"
+  },
+  "observability": {
+    "enabled": false
+  }
+}

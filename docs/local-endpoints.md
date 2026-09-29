@@ -6,7 +6,7 @@ For speech recognition, open Speech-to-text model. Paste and save the complete O
 
 For text cleanup, open Model settings. Paste and save the complete chat completion URL, such as `http://localhost:1234/v1/chat/completions`. Open Model to paste and save the server's model ID. IDs may contain slashes and colons.
 
-Start your model server before dictating. S2T sends WAV audio as a multipart `file` with `model` and `response_format=json` for speech recognition. Text cleanup uses non-streaming chat completions with system and user messages. Custom system prompts, dictionary entries and clipboard placeholders still apply.
+Start your model server before dictating. S2T sends WAV audio as a multipart `file` with `model` and `response_format=json` for speech recognition. Text cleanup uses non-streaming chat completions with system and user messages. Custom instructions, dictionary entries and clipboard placeholders still apply.
 
 The two URLs and model IDs persist independently. Switching back to a cloud provider restores its model settings. Local requests send no API key and never retry through a cloud provider. This option currently supports servers that do not require authentication. A failed cleanup still delivers the original transcript.
 

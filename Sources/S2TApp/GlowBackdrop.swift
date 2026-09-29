@@ -10,21 +10,26 @@ struct GlowProfile: Equatable {
     let energy: Double
     let heights: [Double]
     var topLayout: TopGlowLayout? = nil
+    var windowBottom: WindowBottomLayout? = nil
     var inputOutline: InputOutlineBackdrop? = nil
     var bezel: BezelBackdrop? = nil
+    var processingInput: InputProcessingBackdrop? = nil
     var sweepStrength: Double = 1
     var distortion: GlowDistortion = .identity
     var active = true
     var reducedMotion = false
     var response = GlowResponseSettings()
+    /// Scales native blur while a held listening frame fades out during a phase handoff.
+    var blurScale = 1.0
     var chromaGeometry: ChromaAppearance.Geometry {
-        if let inputOutline { return .input(inputOutline.rect, inputOutline.cornerRadius, inputOutline.cornerStyle) }
+        if let inputOutline { return inputOutline.geometry }
         if let topLayout { return .notch(topLayout) }
+        if let windowBottom { return .windowBottom(windowBottom) }
         return .bottom
     }
     var selectedStrength: Double { inputOutline?.strength ?? sweepStrength }
     var speechGain: Double { active ? GlowSpeechEnvelope.gain(energy: energy, selected: selectedStrength, settings: response) : 0 }
-    var blurGain: Double { GlowSpeechEnvelope.blurGain(speechGain) * response.tuning.backgroundBlur }
+    var blurGain: Double { GlowSpeechEnvelope.blurGain(speechGain) * response.tuning.backgroundBlur * blurScale }
     var speechExpansion: Double { GlowSpeechEnvelope.expansion(energy: energy, selected: selectedStrength, reducedMotion: reducedMotion, settings: response) }
     var leftFade: Double = 0.13
     var rightFade: Double = 0.88
@@ -87,11 +92,12 @@ struct GlowBackdrop: NSViewRepresentable {
     }
 
     static func mask(profile: GlowProfile, size: NSSize = NSSize(width: 384, height: GlowProfile.extent)) -> NSImage? {
+        if let processing = profile.processingInput { return processing.mask(size: size) }
         if let bezel = profile.bezel { return bezel.mask(size: size) }
         if let outline = profile.inputOutline { return outline.mask(size: size, distortion: profile.distortion, expansion: profile.speechExpansion, falloff: profile.response.tuning.falloff) }
         if let layout = profile.topLayout { return TopGlow.radiusMap(layout: layout, energy: profile.energy, size: size, strength: profile.sweepStrength, distortion: profile.distortion, expansion: profile.speechExpansion, width: profile.response.width, falloff: profile.response.tuning.falloff) }
-        return ChromaAppearance.radiusMap(geometry: .bottom, size: size, distortion: profile.distortion,
-            exterior: Path(CGRect(origin: .zero, size: size)), expansion: profile.speechExpansion, width: profile.response.width, falloff: profile.response.tuning.falloff)
+        return ChromaAppearance.radiusMap(geometry: profile.chromaGeometry, size: size, distortion: profile.distortion,
+            exterior: profile.windowBottom?.clipPath ?? Path(CGRect(origin: .zero, size: size)), expansion: profile.speechExpansion, width: profile.response.width, falloff: profile.response.tuning.falloff)
     }
 
 
@@ -155,11 +161,14 @@ final class ProgressiveBackdropView: GlurBackdropNSView {
         preparedGeometry = geometry
         var next = currentProfile ?? GlowProfile(energy: 0, heights: [3])
         next.topLayout = nil
+        next.windowBottom = nil
         next.inputOutline = nil
         switch geometry {
         case .bottom: break
+        case let .windowBottom(layout): next.windowBottom = layout
         case let .notch(layout): next.topLayout = layout
-        case let .input(rect, radius, cornerStyle): next.inputOutline = InputOutlineBackdrop(rect: rect, cornerRadius: radius, cornerStyle: cornerStyle)
+        case let .withinInput(contour): next.inputOutline = InputOutlineBackdrop(contour: contour, withinInput: true)
+        case let .input(contour): next.inputOutline = InputOutlineBackdrop(contour: contour)
         }
         profile = next
     }
@@ -299,11 +308,11 @@ final class ProgressiveBackdropView: GlurBackdropNSView {
             backdrop.isHidden = true
             return
         }
-        let radius = profile.bezel.map { _ in Double(BezelBackdrop.radius) }
+        let radius = profile.processingInput.map { _ in InputProcessingBackdrop.radius } ?? profile.bezel.map { _ in Double(BezelBackdrop.radius) }
             ?? profile.chromaGeometry.maximumBlurRadius
         // Keep the sharp original from overwhelming the bezel's variable-radius result.
         backdrop.opacity = profile.bezel == nil ? 1 : BezelBackdrop.opacity
-        let gain = profile.bezel == nil ? profile.blurGain : min(1, profile.energy)
+        let gain = profile.processingInput != nil ? 1 : profile.bezel == nil ? profile.blurGain : min(1, profile.energy)
         let effectiveRadius = radius * gain
         if submittedMap === image, submittedRadius == effectiveRadius, submittedBounds == bounds,
            submittedScale == backdrop.contentsScale,
@@ -331,7 +340,8 @@ final class ProgressiveBackdropView: GlurBackdropNSView {
 // This configures only S2T's transparent overlay windows, never another app's window.
 enum BackdropWindowHosting {
     static func makePanel() -> NSPanel {
-        let panel = NSPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: true)
+        let panel = DictationOverlayPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: true)
+        panel.becomesKeyOnlyIfNeeded = true
         configure(panel)
         return panel
     }
@@ -360,4 +370,11 @@ enum BackdropWindowHosting {
             && window.value(forKey: "shouldAutoFlattenLayerTree") as? Bool == false
             && !window.isOpaque
     }
+}
+
+/// A nonactivating NSPanel can still take keyboard focus without activating its
+/// app. Recording decoration must never participate in responder selection.
+private final class DictationOverlayPanel: NSPanel {
+    override var canBecomeKey: Bool { false }
+    override var canBecomeMain: Bool { false }
 }

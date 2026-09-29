@@ -23,7 +23,7 @@ final class ClipboardContextTests: XCTestCase {
         XCTAssertEqual(context.items.count, 1)
         XCTAssertTrue(context.items[0].value.hasPrefix("sk-or-v1-"))
         XCTAssertFalse(context.prompt.contains(context.items[0].value))
-        XCTAssertTrue(history.context(for: "Try this ElevenLabs API key", at: now).items.isEmpty)
+        XCTAssertTrue(history.context(for: "Try this AssemblyAI API key", at: now).items.isEmpty)
     }
 
     func testOrdinaryDictationDoesNotUseHistoryAndGenericClipboardDoesNotExposeKeys() {
@@ -103,7 +103,7 @@ final class ClipboardContextTests: XCTestCase {
         let context = history.context(for: "Try this API key", at: now)
         let response = try JSONSerialization.data(withJSONObject: ["choices": [["message": ["content": "Try this API key: " + context.items[0].placeholder], "finish_reason": "stop"]]])
         for provider in ProcessingProvider.allCases {
-            let path = provider == .openRouter ? "/api/v1/chat/completions" : "/v1/chat/completions"
+            let path = provider == .xai ? "/v1/chat/completions" : provider == .openRouter ? "/api/v1/chat/completions" : "/v1/chat/completions"
             let transport = ScriptedTransport([.init(path: path, status: 200, json: String(decoding: response, as: UTF8.self))])
             let result = try await DictationAPI(transport: transport, codex: FixtureCodex(output: "Try this API key: " + context.items[0].placeholder)).process(text: "Try this API key", mode: .clean, model: provider.defaultModel, apiKey: "separate-auth-fixture", provider: provider, clipboardContext: context, localURL: LocalEndpoint.defaultProcessingURL)
             XCTAssertEqual(result.text, "Try this API key: " + key)

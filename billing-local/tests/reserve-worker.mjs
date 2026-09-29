@@ -9,7 +9,7 @@ try {
     provider: "openrouter",
     model: "fixture",
     priceVersion: "v1",
-    maxCost: 200000,
+    maxCost: workerData.maxCost ?? 200000,
   });
   parentPort.postMessage(true);
 } catch {

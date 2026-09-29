@@ -1,5 +1,9 @@
 # Compact Appearance window
 
+September 22 notch preview correction: the housing PNG has transparent padding. The preview contour now uses the visible housing bounds, preserving the artwork placement. `--verify-notch-fit` reads the bundled source image and checks both straight sides and the bottom within one source pixel. It also checks that the preview renderer uses this geometry. Physical display geometry still comes from NSScreen. These checks do not capture the screen.
+
+Build 784 validation passed all 447 service/domain tests and packaged `--verify-notch-fit`, `--verify-notch`, `--verify-appearance-selection`, `--verify-settings-sidebar` and `--verify-build` checks.
+
 S2T 1.0.1, Build 199 replaces the Appearance submenu with a native window action. The window is 432 points wide with 562 points of content height, reduced to 354 for Bezel. It opens only when selected. Native controls save immediately.
 
 The window retains mode, theme, Bezel side, intensity, width, quiet amount and loud amount. It adds:

@@ -64,8 +64,10 @@ public enum PromptTiming {
         }
     }
 
-    public static func nearestFrame(to time: Double, times: [Double], tolerance: Double = 0.6) -> Int? {
+    /// `leadingTolerance` allows a wider gap for times before the first frame.
+    public static func nearestFrame(to time: Double, times: [Double], tolerance: Double = 0.6, leadingTolerance: Double? = nil) -> Int? {
         guard time.isFinite, !times.isEmpty else { return nil }
+        if let leadingTolerance, time < times[0] { return times[0] - time <= max(tolerance, leadingTolerance) ? 0 : nil }
         var lower = 0, upper = times.count
         while lower < upper {
             let middle = (lower + upper) / 2

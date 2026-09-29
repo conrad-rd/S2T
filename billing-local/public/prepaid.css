@@ -1,0 +1,39 @@
+.prepaid-page{background:#000;color:#fff;font-size:16px;--ink:#fff;--accent:#fff}
+.prepaid-page header{max-width:1400px;height:100px;padding-inline:clamp(24px,5vw,72px)}
+.prepaid-page .brand img{width:64px;height:42px;object-fit:contain}
+.prepaid-page header>.site-action{margin-left:auto}
+.prepaid-page main{max-width:1160px;padding:64px clamp(24px,5vw,72px) 80px}
+.prepaid-layout{display:grid;grid-template-columns:1fr 1.2fr;gap:72px}
+.prepaid-page h1{font-size:clamp(30px,3.2vw,46px);font-weight:500;line-height:1.18;letter-spacing:-.055em;margin:0 0 18px}
+.prepaid-intro p{color:#ffffff80;font-size:14px;line-height:1.6}
+.prepaid-content{min-width:0;max-width:480px}
+.prepaid-page .site-action{display:inline-flex;align-items:center;justify-content:center;gap:12px;min-height:52px;padding:14px 12px;border:0;border-radius:14px;background:transparent;color:#fff;font:inherit;line-height:calc(10 / 7);transition:background .2s,color .2s}
+.prepaid-page .site-action:hover,.prepaid-page .site-action:focus-visible{color:#000;background:#fff}
+.prepaid-page .site-choice{border:0;border-radius:100px;padding:16px 22px;background:transparent;color:#fff;font:600 15px/1.5 Manrope,sans-serif;letter-spacing:-.025em;white-space:nowrap;transition:background .2s,color .2s}
+.prepaid-page .site-choice[aria-pressed=true],.prepaid-page .pay-button{background:#fff;color:#000}
+.prepaid-page .site-choice:hover:not([aria-pressed=true]):not(.pay-button){background:#ffffff1f}
+.prepaid-page .pay-button{width:100%;margin-top:24px}
+.prepaid-page .pay-button:hover{background:#e8e8e8}
+.prepaid-total{margin:0 0 32px;display:flex;flex-wrap:wrap;align-items:baseline;gap:12px;font:clamp(40px,5vw,64px)/1.1 Bitcount,monospace;letter-spacing:-.04em}
+.credit-label{font:400 14px Manrope,sans-serif;letter-spacing:0;color:#ffffff80}
+.prepaid-presets{display:flex;justify-content:space-between;gap:4px}
+.prepaid-page details{border:0;margin:20px 0 0;padding:0}
+.prepaid-page summary{display:flex;gap:8px;width:fit-content;padding:4px 0;color:#ffffff80;font-size:13px;font-weight:400;cursor:pointer;list-style:none}
+.prepaid-page summary:after{font-size:14px;color:inherit;margin-left:0}
+.prepaid-page summary::-webkit-details-marker{display:none}
+.prepaid-page summary:hover,.prepaid-page details[open]>summary{color:#fff}
+.prepaid-page details>p,.prepaid-page details>form{margin-top:16px}
+.prepaid-page details .muted{font-size:13px;line-height:1.65}
+.prepaid-page label{display:block;font-size:13px;margin:16px 0 10px}
+.prepaid-page .prepaid-amount{display:flex;align-items:baseline;font:32px Bitcount,monospace;gap:8px;max-width:180px;border-bottom:1px solid #ffffff40}
+.prepaid-page #guest-amount{font:inherit;color:inherit;background:transparent;border:0;min-width:0;width:100%;padding:8px 0}
+.prepaid-page .key-field{display:block;min-width:0;width:100%;background:transparent;color:#fff;border:0;border-bottom:1px solid #ffffff40;border-radius:0;padding:12px 0;font:13px/1.6 monospace}
+.prepaid-page #guest-backup .site-action,.prepaid-page #guest-recovery .site-action{margin-top:12px}
+.prepaid-page #guest-status{margin:20px 0;color:#ffffffb3;font-size:13px;line-height:1.6}
+.prepaid-policies{display:flex;gap:20px;margin-top:40px;color:#ffffff66;font-size:12px}
+.prepaid-policies a:hover{color:#fff}
+.prepaid-page .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;border:0}
+@media(max-width:800px){.prepaid-layout{grid-template-columns:1fr;gap:32px}.prepaid-page main{max-width:560px;padding-top:32px}.prepaid-content{max-width:none}.prepaid-page header{height:84px}}
+@media(max-width:680px){.prepaid-page .site-action{min-height:48px;padding:12px 10px;font-size:14px}.prepaid-page .site-choice{padding:13px 11px;font-size:12px}}
+@media(max-width:420px){.prepaid-page main{padding-inline:24px}.prepaid-page header{height:76px}.prepaid-total{font-size:44px}}
+@media(prefers-reduced-motion:reduce){.prepaid-page *{transition:none!important}}

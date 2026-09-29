@@ -25,7 +25,7 @@ import S2TCore
     init(state: AppState, presentsAppearanceWindow: Bool = true) {
         self.state = state
         self.presentsAppearanceWindow = presentsAppearanceWindow
-        statusItem = NSStatusBar.system.statusItem(withLength: MenuBarArtwork.size.width)
+        statusItem = MenuBarStatusItem.make(length: MenuBarArtwork.size.width, preview: state.isPreview)
         super.init()
         menu.autoenablesItems = false
         menu.delegate = self
@@ -47,11 +47,19 @@ import S2TCore
     func refreshStatus() {
         refreshPending = false
         let label = state.isCapturingShortcut ? "Press a key or combination. Escape cancels." : statusMessage ?? state.phase.label
-        statusItem.button?.toolTip = "S2T · \(label)"
-        statusItem.button?.setAccessibilityLabel("S2T, \(label)")
-        statusItem.length = state.isCapturingShortcut ? 170 : MenuBarArtwork.size.width
-        statusItem.button?.title = state.isCapturingShortcut ? " Press a key…" : ""
-        statusItem.button?.contentTintColor = state.phase == .recording ? .systemRed : state.phase.busy ? .controlAccentColor : nil
+        if let button = statusItem.button {
+            let tooltip = "S2T · \(label)"
+            if button.toolTip != tooltip {
+                button.toolTip = tooltip
+                button.setAccessibilityLabel("S2T, \(label)")
+            }
+            let length = state.isCapturingShortcut ? 170 : MenuBarArtwork.size.width
+            if statusItem.length != length { statusItem.length = length }
+            let title = state.isCapturingShortcut ? " Press a key…" : ""
+            if button.title != title { button.title = title }
+            let tint: NSColor? = state.phase == .recording ? .systemRed : state.phase.busy ? .controlAccentColor : nil
+            if button.contentTintColor != tint { button.contentTintColor = tint }
+        }
         refreshItems(menu)
         if displayedProcessingModel != state.processingModel {
             processingModelEditor?.field.stringValue = state.processingModel
@@ -71,7 +79,10 @@ import S2TCore
         }
     }
 
-    func showMenu() { statusItem.button?.performClick(nil) }
+    func showMenu() {
+        statusItem.isVisible = true
+        statusItem.button?.performClick(nil)
+    }
     func dismissMenu() { menu.cancelTracking() }
 
     func menuWillOpen(_ menu: NSMenu) {
@@ -104,38 +115,33 @@ import S2TCore
     private var canConfigure: Bool { !state.phase.busy && state.phase != .recording }
 
     private func buildRoot(_ menu: NSMenu) {
-        submenu("Set up dictation", id: "setup", in: menu) { [weak self] menu in self?.buildSetup(menu) }
-        info(state.phase.label, in: menu, id: "status.phase")
-        action(state.phase == .recording ? "Finish dictation" : "Start dictation", id: "dictation.toggle", in: menu, enabled: !state.phase.busy) { [weak self] in
+        submenu("Appearance", id: "appearance.styles", in: menu) { [weak self] menu in
             guard let self else { return }
-            self.state.toggleRecording()
-
+            for mode in GlowAppearance.selectableCases {
+                self.action(mode.title, id: "glowAppearance." + mode.rawValue, in: menu,
+                    checked: self.state.glowAppearance.selection == mode) { [weak self] in self?.state.glowAppearance = mode }
+            }
         }
-        action("Cancel dictation", id: "dictation.cancel", in: menu, enabled: state.canCancel) { [weak self] in self?.state.cancel() }
-        info("Add your keys under Settings → API keys to begin.", in: menu, id: "status.keys")
-        submenu("Last dictation", id: "result", in: menu) { [weak self] menu in self?.buildResult(menu) }
-        submenu("Clipboard history", id: "clipboard.history", in: menu) { [weak self] menu in self?.buildClipboardHistory(menu) }
-        menu.addItem(.separator())
-        submenu("Prompt mode · Experimental beta", id: "prompt", in: menu) { [weak self] menu in self?.buildPromptMode(menu) }
-        submenu("Dictation settings", id: "dictation", in: menu) { [weak self] menu in self?.buildDictation(menu) }
+        action("Copy last dictation", id: "result.copy", in: menu, enabled: lastDictationText != nil) { [weak self] in
+            guard let self, let text = self.lastDictationText else { return }
+            self.state.copyText(text)
+        }
+        action("Retry last dictation", id: "result.retry", in: menu, enabled: state.canRetry) { [weak self] in self?.state.retry() }
         let settings = action("Settings…", id: "appearance", in: menu) { [weak self] in self?.appearanceWindow.show() }
         settings.keyEquivalent = ","
         settings.keyEquivalentModifierMask = .command
-        submenu(statusMessage != nil ? "Needs attention" : "Status", id: "notice", in: menu) { [weak self] menu in
-            guard let self else { return }
-            self.message(self.statusMessage ?? self.state.phase.label, in: menu, id: "status.message")
-            self.action("Dismiss message", id: "notice.dismiss", in: menu) { [weak self] in self?.state.errorMessage = nil; self?.state.notice = nil }
-        }
-        menu.addItem(.separator())
-        action("Quit S2T", id: "quit", in: menu) { NSApp.terminate(nil) }
+        let quit = action("Quit S2T", id: "quit", in: menu) { NSApp.terminate(nil) }
+        quit.keyEquivalent = "q"
+        quit.keyEquivalentModifierMask = .command
     }
 
     private func buildPromptMode(_ menu: NSMenu) {
         action("Enable Prompt mode", id: "prompt.enabled", in: menu, checked: state.promptModeEnabled, enabled: canConfigure) { [weak self] in self?.state.promptModeEnabled.toggle() }
         submenu("Activation key · \(state.promptShortcutKey.displayName)", id: "prompt.activation", in: menu) { [weak self] menu in self?.buildPromptActivation(menu) }
         action("Start prompt dictation", id: "prompt.start", in: menu, enabled: canConfigure && state.promptModeEnabled) { [weak self] in self?.state.toggleRecording(prompt: true) }
-        message("Experimental beta. While dictating, point and say 'here', 'like here', 'look at this', or 'check this out'. Records the entire display and extracts screenshots at the time of each spoken reference.", in: menu)
-        message("While you dictate, Prompt mode records full-screen frames in memory only. It discards the temporary recording after extracting reference screenshots, or when cancelled. No screen-recording file is saved. It matches references to the final transcript, then pastes the selected screenshots with short notes. Selected images and dictation go to your chosen image provider. Local endpoint uses your server; OpenRouter and Codex use cloud inference.", in: menu)
+        message("While recording a prompt:\n⌘ Click · Capture the area around your pointer\n⌘ Drag · Draw a screenshot rectangle\nEscape · Cancel a rectangle\nHold Escape · Cancel Prompt mode\nOr point and say 'look here'.", in: menu, id: "prompt.gestures")
+        message("Captured screenshots stack in the bottom left. Finish dictation to attach them to your prompt. Full-display history stays in memory until reference matching finishes.", in: menu)
+
         action(state.promptSetupTitle, id: "prompt.setup", in: menu, enabled: canConfigure) { [weak self] in self?.state.setUpPromptMode() }
         submenu("Reference language", id: "prompt.language", in: menu) { [weak self] menu in
             guard let self else { return }
@@ -144,46 +150,11 @@ import S2TCore
             }
             self.message("Detection runs on device while you speak. Recognition delay and missed phrases are possible. German examples: 'schau mal hier', 'schau dir das an'.", in: menu)
         }
-        submenu("Image model · \(state.promptVisionProvider.title)", id: "prompt.model", in: menu) { [weak self] menu in
-            self?.buildVisionModel(menu)
-        }
         menu.addItem(.separator())
         message(state.promptStatus, in: menu, id: "prompt.status")
         submenu("Reference images", id: "prompt.images", in: menu) { [weak self] menu in self?.buildPromptImages(menu) }
     }
 
-    private func buildVisionModel(_ menu: NSMenu) {
-        let provider = state.promptVisionProvider
-        for option in VisionProvider.allCases {
-            action(option.title, id: "visionProvider." + option.rawValue, in: menu, checked: provider == option, enabled: canConfigure) { [weak self] in self?.state.promptVisionProvider = option }
-        }
-        menu.addItem(.separator())
-        if provider == .local {
-            let editor = MenuValueEditor(title: "Image endpoint URL", value: state.localVisionURL, secure: false, enabled: canConfigure, onPaste: { _ in }) { [weak self] value in
-                guard let self, self.canConfigure, self.state.promptVisionProvider == provider else { return "Reopen Image model before saving." }
-                do { self.state.localVisionURL = try LocalEndpoint.url(value).absoluteString; return nil }
-                catch { return error.localizedDescription }
-            }
-            editor.identifier = NSUserInterfaceItemIdentifier("local.vision.url")
-            custom(editor, in: menu)
-            message("Load an image-capable model on your OpenAI-compatible server. Images go only to this endpoint, without API keys or cloud fallback. Image capability is checked when a reference is described.", in: menu)
-        }
-        if provider == .codex { codexSettings(in: menu) }
-        let editor = MenuValueEditor(title: "Image-capable model ID", value: state.promptVisionModel, secure: false, enabled: canConfigure, onPaste: { _ in }) { [weak self] value in
-            guard let self, self.canConfigure, self.state.promptVisionProvider == provider else { return "Provider changed. Reopen Image model before saving." }
-            let value = value.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard provider.validModelID(value) else { return "Enter a valid image model ID." }
-            self.state.promptVisionModel = value
-            return nil
-        }
-        editor.identifier = NSUserInterfaceItemIdentifier("vision.model")
-        editor.validateValue = { [weak self] value in
-            guard let self, self.state.promptVisionProvider == provider else { return "Provider changed. Reopen Image model before saving." }
-            return await self.state.validatePromptVisionModel(value)
-        }
-        custom(editor, in: menu)
-        if provider == .openRouter { message("Uses the saved OpenRouter key. Image support is verified before saving and sending. Your text-cleanup model stays separate.", in: menu) }
-    }
 
     private func codexSettings(in menu: NSMenu) {
         let editor = MenuValueEditor(title: "Codex executable path · blank for automatic", value: state.codexExecutable, secure: false, enabled: canConfigure, onPaste: { _ in }) { [weak self] value in
@@ -195,7 +166,7 @@ import S2TCore
         }
         editor.identifier = NSUserInterfaceItemIdentifier("codex.executable")
         custom(editor, in: menu)
-        message("Uses your Codex login and OpenAI cloud inference. Run codex login once in Terminal. Use default for the CLI's default model, or enter a model ID. Text and image models stay separate.", in: menu)
+        message("Uses your Codex login and OpenAI cloud inference. Run codex login once in Terminal. Use default for the CLI's default model, or enter a model ID.", in: menu)
         action("Codex setup instructions…", id: "codex.help", in: menu) { NSWorkspace.shared.open(URL(string: "https://developers.openai.com/codex/cli")!) }
     }
 
@@ -302,9 +273,10 @@ import S2TCore
             return self.state.keyValue(account)
         }
         let write: (String) -> Void = { [weak self] value in
-            switch account { case "assemblyai": self?.state.assemblyKey = value; case "openrouter": self?.state.routerKey = value; case "elevenlabs": self?.state.elevenLabsKey = value; case "cerebras": self?.state.cerebrasKey = value; default: break }
+            switch account { case "xai": self?.state.xaiKey = value; case "assemblyai": self?.state.assemblyKey = value; case "openrouter": self?.state.routerKey = value; default: break }
         }
-        let editor = MenuValueEditor(title: title, value: read(), secure: true, saved: state.savedKeyAccounts.contains(account), enabled: canConfigure, onPaste: write) { [weak self] _ in
+        let editor = MenuValueEditor(title: title, value: read(), secure: true, saved: state.savedKeyAccounts.contains(account), enabled: canConfigure, onPaste: { _ in }) { [weak self] value in
+            write(value)
             self?.state.saveAPIKey(account: account)
             return self?.state.savedKeyAccounts.contains(account) == true ? nil : self?.state.keyStatuses[account]?.message ?? "Could not save the key."
         }
@@ -322,7 +294,7 @@ import S2TCore
         if transcription { transcriptionEditors.append(item) } else { processingEditors.append(item) }
         action("Get an API key…", id: transcription ? "key.get.speech" : "key.get.processing", in: menu) { [weak self] in
             let provider = transcription ? self?.state.transcriptionProvider.rawValue ?? account : self?.state.processingProvider?.rawValue ?? account
-            let address = provider == "assemblyai" ? "https://www.assemblyai.com/dashboard/signup" : provider == "openrouter" ? "https://openrouter.ai/settings/keys" : provider == "elevenlabs" ? "https://elevenlabs.io/app/settings/api-keys" : "https://cloud.cerebras.ai/platform/"
+            let address = provider == "assemblyai" ? "https://www.assemblyai.com/dashboard/signup" : "https://openrouter.ai/settings/keys"
             NSWorkspace.shared.open(URL(string: address)!)
         }
     }
@@ -351,14 +323,14 @@ import S2TCore
         let editor = MenuValueEditor(title: "\(provider.title) model ID", value: state.transcriptionModel, secure: false, enabled: canConfigure, onPaste: { _ in }) { [weak self] value in
             guard provider.validModelID(value) else { return "Enter a valid \(provider.title) model ID." }
             if provider == .local { self?.state.localTranscriptionModel = value }
-            else if provider == .elevenLabs { self?.state.elevenLabsModel = value }
+            else if provider == .xai { self?.state.xaiTranscriptionModel = value }
             else { self?.state.routerTranscriptionModel = value }
             return nil
         }
         custom(editor, in: menu)
         action("Use default · \(provider.defaultModel)", id: "speech.model.default", in: menu, enabled: canConfigure) { [weak self] in
             if provider == .local { self?.state.localTranscriptionModel = provider.defaultModel }
-            else if provider == .elevenLabs { self?.state.elevenLabsModel = provider.defaultModel }
+            else if provider == .xai { self?.state.xaiTranscriptionModel = provider.defaultModel }
             else { self?.state.routerTranscriptionModel = provider.defaultModel }
             editor.field.stringValue = provider.defaultModel
             editor.saveButton.title = "✓ Saved"
@@ -366,12 +338,12 @@ import S2TCore
         }
         if provider == .local { return }
         action("Browse speech-to-text models…", id: "speech.model.catalog", in: menu) {
-            NSWorkspace.shared.open(URL(string: provider == .openRouter ? "https://openrouter.ai/models?output_modalities=transcription" : "https://elevenlabs.io/docs/overview/capabilities/speech-to-text")!)
+            NSWorkspace.shared.open(URL(string: provider == .xai ? "https://docs.x.ai/developers/models/speech-to-text" : "https://openrouter.ai/models?output_modalities=transcription")!)
         }
     }
 
     private func buildInputPresets(_ menu: NSMenu) {
-        for preset in InputTargetPreset.allCases {
+        for preset in InputTargetPreset.allCases where preset != .safari {
             action(preset.title, id: "inputPreset." + preset.rawValue, in: menu,
                    checked: !state.disabledInputPresets.contains(preset.rawValue), enabled: canConfigure) { [weak self] in
                 guard let self else { return }
@@ -379,12 +351,11 @@ import S2TCore
                 else { self.state.disabledInputPresets.insert(preset.rawValue) }
             }
         }
-        message("Around Input tries enabled app and website presets first, then automatic detection. Safari covers its address field; website presets take priority. Terminal and Claude Code use the cursor row when it is exposed.", in: menu)
+        message("All apps use automatic input detection. These presets refine matching shapes. If no field is available, the glow uses the bottom of the screen. Terminal and Claude Code can use the cursor row when it is exposed.", in: menu)
     }
 
     private func buildDictation(_ menu: NSMenu) {
         submenu("Input presets", id: "inputPresets", in: menu) { [weak self] menu in self?.buildInputPresets(menu) }
-        action("Paste where dictation started", id: "dictation.pasteAtStart", in: menu, checked: state.pasteAtStart, enabled: canConfigure) { [weak self] in self?.state.pasteAtStart.toggle() }
         submenu("Microphone", id: "microphone", in: menu) { [weak self] menu in self?.buildMicrophone(menu) }
         submenu("Activation key", id: "activation", in: menu) { [weak self] menu in self?.buildActivation(menu) }
         menu.addItem(.separator())
@@ -433,7 +404,7 @@ import S2TCore
         action("Hold to talk", id: "shortcut.hold", in: menu, checked: state.holdEnabled, enabled: canConfigure) { [weak self] in self?.state.holdEnabled.toggle() }
         action("Tap to toggle", id: "shortcut.tap", in: menu, checked: state.tapEnabled, enabled: canConfigure) { [weak self] in self?.state.tapEnabled.toggle() }
         menu.addItem(.separator())
-        message("Hold and release to finish, or tap once to start and again to finish. Fn replaces the emoji picker while enabled.", in: menu)
+        message("Hold and release to finish, or tap once to start and again to finish. Hold Escape for 0.6 seconds to cancel. Fn replaces the emoji picker while enabled.", in: menu)
         message(state.shortcutStatus, in: menu, id: "shortcut.status")
         action("Open Keyboard settings…", id: "shortcut.keyboard", in: menu) {
             NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.Keyboard-Settings.extension")!)
@@ -444,14 +415,13 @@ import S2TCore
     }
 
     private var modelRowTitle: String {
-        let name = state.processingModel == ProcessingProvider.cerebrasOpenRouterModel
+        let name = state.processingModel == ProcessingProvider.defaultOpenRouterModel
             ? "GPT-OSS 120B" : String(state.processingModel.split(separator: "/").last ?? "Choose model")
         return "Model · " + String(name.prefix(42)) + (name.count > 42 ? "…" : "")
     }
 
     private var hostRowTitle: String {
-        let name = state.processingProvider == .cerebras || state.routerEndpoint == "cerebras/fp16"
-            ? "Cerebras" : state.routerEndpoint.isEmpty ? "Automatic" : state.routerEndpoint
+        let name = state.routerEndpoint.isEmpty ? "Automatic" : state.routerEndpoint
         return "Host · " + String(name.prefix(42)) + (name.count > 42 ? "…" : "")
     }
 
@@ -479,7 +449,7 @@ import S2TCore
                 let editor = MenuValueEditor(title: "OpenRouter endpoint", value: self.state.routerEndpoint, secure: false,
                     enabled: self.canConfigure, onPaste: { _ in }) { [weak self] value in
                     guard value.isEmpty || value.range(of: #"^[a-z0-9][a-z0-9/_.-]{0,199}$"#, options: .regularExpression) != nil else {
-                        return "Enter an endpoint such as cerebras/fp16."
+                        return "Enter a valid hosting endpoint or leave empty for automatic hosting."
                     }
                     self?.state.routerEndpoint = value
                     return nil
@@ -493,38 +463,32 @@ import S2TCore
                 }
             }
         }
-        if provider == .openRouter {
-            menu.addItem(.separator())
-            action("GPT-OSS 120B on Cerebras", id: "model.cerebrasPreset", in: menu,
-                   checked: state.processingModel == ProcessingProvider.cerebrasOpenRouterModel && state.routerEndpoint == "cerebras/fp16",
-                   enabled: canConfigure) { [weak self] in self?.state.useCerebrasThroughOpenRouter() }
-        }
     }
 
     private func buildResult(_ menu: NSMenu) {
-        guard !state.output.isEmpty else { info("No dictation yet", in: menu); return }
-        action(state.copied ? "Copied" : "Copy text", id: "result.copy", in: menu) { [weak self] in self?.state.showOriginal = false; self?.state.copyResult() }
-        if !state.promptImages.isEmpty { submenu("Reference images", id: "result.images", in: menu) { [weak self] menu in self?.buildPromptImages(menu) } }
-        action("Copy original transcript", id: "result.original", in: menu) { [weak self] in self?.state.showOriginal = true; self?.state.copyResult() }
-        if state.canRetry { action("Retry", id: "result.retry", in: menu) { [weak self] in self?.state.retry() } }
+        if let notice = state.historicalReceiptNotice { message(notice, in: menu) }
+        if state.canRetry { action("Retry recording", id: "result.retry", in: menu) { [weak self] in self?.state.retry() } }
+        if state.canSaveRecording { action("Save recording…", id: "result.saveRecording", in: menu) { [weak self] in self?.state.saveRecording() } }
+        if !state.recoveredRecordings.isEmpty {
+            submenu("Saved recordings", id: "result.recovery", in: menu) { [weak self] menu in
+                guard let self else { return }
+                for saved in self.state.recoveredRecordings {
+                    self.action(saved.createdAt.formatted(date: .abbreviated, time: .standard), id: "recovery." + saved.id.uuidString, in: menu, enabled: !self.state.phase.busy && self.state.phase != .recording) { [weak self] in self?.state.recoverRecording(saved) }
+                }
+            }
+        }
+        for (index, entry) in state.recentRecordings.entries.prefix(2).enumerated() {
+            action(index == 0 ? "Previous recording" : "Two recordings ago", id: "result.recent.\(index)", in: menu) { [weak self] in self?.state.copyText(entry.text) }
+        }
+        if state.recentRecordings.entries.isEmpty { info("No recent recordings", in: menu) }
+        action("Show all transcripts…", id: "result.all", in: menu) { [weak self] in self?.appearanceWindow.showRecentRecordings() }
         if let model = state.processingFailureModel { message("Rewrite failed for \(model). The original transcript was delivered.", in: menu) }
-        info("\(state.wordCount) words · \(state.modelUsed)", in: menu)
-        menu.addItem(.separator())
-        let scroll = NSScrollView(frame: NSRect(x: 0, y: 0, width: 340, height: 170))
-        scroll.hasVerticalScroller = true
-        scroll.drawsBackground = false
-        let text = NSTextView(frame: NSRect(x: 0, y: 0, width: 322, height: 170))
-        text.isEditable = false
-        text.isSelectable = true
-        text.drawsBackground = false
-        text.textColor = .labelColor
-        text.font = .systemFont(ofSize: 13)
-        text.textContainerInset = NSSize(width: 10, height: 8)
-        text.string = state.output
-        text.autoresizingMask = [.width]
-        text.isVerticallyResizable = true
-        scroll.documentView = text
-        custom(scroll, in: menu)
+    }
+
+    private var lastDictationText: String? {
+        if !state.output.isEmpty { return state.output }
+        if !state.rawTranscript.isEmpty { return state.rawTranscript }
+        return state.recentRecordings.entries.first?.text
     }
 
     private func submenu(_ title: String, id: String, in menu: NSMenu, build: @escaping (NSMenu) -> Void) {
@@ -579,10 +543,16 @@ import S2TCore
                 case "dictation.toggle": symbol = state.phase == .recording ? "stop.circle" : "mic"
                 case "dictation.cancel": symbol = "xmark.circle"
                 case "result": symbol = "text.bubble"
+                case "result.copy": symbol = "doc.on.doc"
+                case "result.retry": symbol = "arrow.clockwise"
                 case "clipboard.history": symbol = "clipboard"
                 case "prompt": symbol = "sparkles"
                 case "dictation": symbol = "slider.horizontal.3"
+                case "dashboard": symbol = "chart.bar"
+                case "meetings": symbol = "person.2.wave.2"
+                case "meetings.stop": symbol = "stop.circle"
                 case "appearance": symbol = "gearshape"
+                case "appearance.styles": symbol = "paintpalette"
                 case "keys": symbol = "key"
                 case "notice": symbol = "exclamationmark.triangle"
                 case "quit": symbol = "power"
@@ -620,11 +590,12 @@ import S2TCore
             case "model.endpoint", "processing.host.summary": title = hostRowTitle
             case "status.keys": entry.isHidden = state.canRecord
             case "shortcut.current": title = state.isCapturingShortcut ? "Press a key. Escape cancels." : "Current key: \(state.shortcutKey.displayName)"
-            case "appearance": title = keyTitle("Settings…", accounts: APIAccount.allCases.map(\.rawValue))
+            case "meetings": title = state.meetingRecordingActive ? "Meeting recording…" : "Meetings…"
+            case "meetings.stop": entry.isHidden = !state.meetingRecordingActive
+            case "appearance": title = "Settings…"
             case "keys": title = keyTitle("API keys", accounts: APIAccount.allCases.map(\.rawValue))
             case "keys.transcription": title = keyTitle("Speech to text · \(state.transcriptionProvider.title)", accounts: TranscriptionProvider.allCases.map(\.rawValue))
-            case "prompt.model": title = "Image model · \(state.promptVisionProvider.title)"
-            case "keys.processing": title = keyTitle("Text cleanup · \(state.processingProvider?.title ?? "OpenRouter")", accounts: ["openrouter", "cerebras"])
+            case "keys.processing": title = keyTitle("Text cleanup · \(state.processingProvider?.title ?? "OpenRouter")", accounts: ["openrouter"])
             case "notice": title = "Needs attention"; entry.isHidden = statusMessage == nil
             default: break
             }
@@ -638,7 +609,7 @@ import S2TCore
                 }
             }
             if entry.view?.identifier?.rawValue == "appearance.inputHelp", let label = entry.view?.subviews.first as? NSTextField {
-                label.stringValue = state.inputOutlineNotice ?? "Around Input outlines the focused text field during dictation. Uses Bottom when a field is unavailable."
+                label.stringValue = state.inputOutlineNotice ?? "Around Input outlines the focused text field during dictation. Outlines the focused window when a field is unavailable."
                 entry.isHidden = state.glowAppearance != .aroundInput
             }
             if entry.view?.identifier?.rawValue == "status.message", let label = entry.view?.subviews.first as? NSTextField {
@@ -680,7 +651,6 @@ import S2TCore
             if id.hasPrefix("provider."), let provider = ProcessingProvider(rawValue: String(id.dropFirst(9))) {
                 title = keyTitle(provider.title, accounts: [provider.rawValue])
             }
-            if id.hasPrefix("visionProvider.") { item.state = state.promptVisionProvider.rawValue == String(id.dropFirst(15)) ? .on : .off; item.isEnabled = canConfigure }
             if id.hasPrefix("provider.") { item.state = state.processingProvider?.rawValue == String(id.dropFirst(9)) ? .on : .off; item.isEnabled = canConfigure }
             if id.hasPrefix("mode.") { item.state = state.mode.rawValue == String(id.dropFirst(5)) ? .on : .off; item.isEnabled = canConfigure }
             if id.hasPrefix("transcription.") { item.state = state.transcriptionMode.rawValue == String(id.dropFirst(14)) ? .on : .off; item.isEnabled = canConfigure && state.transcriptionProvider == .assemblyAI }
@@ -690,7 +660,7 @@ import S2TCore
             }
             if id.hasPrefix("appearance.") { item.state = state.menuAppearance == String(id.dropFirst(11)) ? .on : .off }
             if id.hasPrefix("bezelSide.") { item.state = state.bezelSide.rawValue == String(id.dropFirst(10)) ? .on : .off }
-            if id.hasPrefix("glowAppearance.") { item.state = state.glowAppearance.rawValue == String(id.dropFirst(15)) ? .on : .off }
+            if id.hasPrefix("glowAppearance.") { item.state = state.glowAppearance.selection.rawValue == String(id.dropFirst(15)) ? .on : .off }
             if id.hasPrefix("prompt.locale.") {
                 item.state = state.promptLanguage == String(id.dropFirst(14)) ? .on : .off
                 item.isEnabled = canConfigure
@@ -705,7 +675,7 @@ import S2TCore
                 item.isEnabled = state.promptModeEnabled && (canConfigure || (state.phase == .recording && state.sessionIsPrompt))
             case "prompt.enabled": item.state = state.promptModeEnabled ? .on : .off; item.isEnabled = canConfigure
             case "prompt.setup": title = state.promptSetupTitle; item.isEnabled = canConfigure && state.promptSetupTitle != "Permissions ready"
-            case "dictation.toggle": title = state.phase == .recording ? "Finish dictation" : "Start dictation"; item.isEnabled = !state.phase.busy
+            case "dictation.toggle": title = state.phase == .recording ? "Finish dictation" : "Start dictation"; item.isEnabled = !state.phase.busy && !state.meetingRecordingActive
             case "dictation.cancel":
                 item.isEnabled = state.canCancel
                 item.isHidden = !item.isEnabled
@@ -723,20 +693,19 @@ import S2TCore
                 item.state = state.shortcutTestPassed ? .on : .off
             case "setup.verbatim": item.state = state.mode == .verbatim ? .on : .off; item.isEnabled = canConfigure
             case "shortcut.repair": item.isEnabled = state.shortcutAccessGranted && canConfigure
-            case "dictation.pasteAtStart": item.state = state.pasteAtStart ? .on : .off; item.isEnabled = canConfigure
             case "shortcut.hold": item.state = state.holdEnabled ? .on : .off; item.isEnabled = canConfigure
             case "shortcut.tap": item.state = state.tapEnabled ? .on : .off; item.isEnabled = canConfigure
             case "shortcut.fn": item.state = state.shortcutKey == .function ? .on : .off; item.isEnabled = canConfigure
             case "shortcut.record": item.isEnabled = canConfigure && state.shortcutAccessGranted
             case "microphone.test": title = state.phase == .monitoring ? "Stop microphone test" : state.phase == .preparing ? "Starting microphone…" : "Test microphone"; item.isEnabled = canConfigure
             case "glow.preview": title = state.phase == .preview ? "Stop appearance preview" : "Preview appearance"; item.isEnabled = canConfigure
-            case "model.cerebrasPreset": item.isEnabled = canConfigure; item.state = state.processingModel == ProcessingProvider.cerebrasOpenRouterModel && state.routerEndpoint == "cerebras/fp16" ? .on : .off
             case "clipboard.enabled": item.state = state.clipboardContextEnabled ? .on : .off; item.isEnabled = canConfigure
             case "clipboard.clear": item.isEnabled = canConfigure
             case "key.get.speech": item.isHidden = state.transcriptionProvider == .local
             case "key.get.processing": item.isHidden = state.processingProvider?.requiresAPIKey != true
             case "speech.model.default": item.isEnabled = canConfigure
-            case "result.copy": title = state.copied ? "Copied" : "Copy text"
+            case "result.copy": item.isEnabled = lastDictationText != nil
+            case "result.retry": item.isEnabled = state.canRetry
             default: break
             }
         }
@@ -793,7 +762,7 @@ import S2TCore
     @objc func invoke() { if isEnabled { perform() } }
 }
 
-@MainActor final class MenuValueEditor: NSView {
+@MainActor final class MenuValueEditor: NSView, NSTextFieldDelegate {
     let field: NSTextField
     let pasteButton = NSButton(title: "Paste", target: nil, action: nil)
     let saveButton = NSButton(title: "Save", target: nil, action: nil)
@@ -811,16 +780,18 @@ import S2TCore
         self.secure = secure
         self.onPaste = onPaste
         self.onSave = onSave
-        field = secure ? NSSecureTextField() : NSTextField()
+        field = secure ? EditableAPIKeyField(frame: .zero) : NSTextField()
         super.init(frame: NSRect(x: 0, y: 0, width: 340, height: secure ? 172 : 132))
         let label = NSTextField(labelWithString: title)
         label.font = .systemFont(ofSize: 12, weight: .medium)
         label.frame = NSRect(x: 14, y: secure ? 146 : 106, width: 312, height: 18)
         addSubview(label)
         field.stringValue = value
-        field.placeholderString = "Use Paste below"
-        field.isEditable = false
-        field.isSelectable = false
+        field.placeholderString = secure ? "Type or paste your API key" : "Use Paste below"
+        field.isEditable = secure
+        field.isSelectable = secure
+        field.isEnabled = enabled
+        field.delegate = self
         field.frame = NSRect(x: 14, y: secure ? 112 : 72, width: 312, height: 26)
         field.setAccessibilityLabel(title)
         addSubview(field)
@@ -845,7 +816,7 @@ import S2TCore
         feedback.lineBreakMode = secure ? .byWordWrapping : .byTruncatingTail
         feedback.maximumNumberOfLines = secure ? 4 : 1
         feedback.cell?.wraps = secure
-        feedback.stringValue = saved ? "Saved in Keychain" : "Paste from your clipboard, then save."
+        feedback.stringValue = saved ? "Saved in Keychain" : secure ? "Type or paste your key, then save." : "Paste from your clipboard, then save."
         addSubview(feedback)
         label.autoresizingMask = [.width]
         field.autoresizingMask = [.width]
@@ -895,7 +866,7 @@ import S2TCore
     func setKeyStatus(_ status: APIKeyStatus?, saved: Bool) {
         guard keyStatus != status else { return }
         keyStatus = status
-        feedback.stringValue = status?.message ?? (saved ? "Saved in Keychain" : "Pasted. Click Save to keep it.")
+        feedback.stringValue = status?.message ?? (saved ? "Saved in Keychain" : "Click Save to keep your key.")
         if status == .accepted, !saved { feedback.stringValue = "Key accepted. Save to keep it in Keychain." }
         feedback.toolTip = feedback.stringValue
         feedback.textColor = status?.needsAttention == true ? .systemRed : .secondaryLabelColor
@@ -903,8 +874,22 @@ import S2TCore
     }
 
     func setEnabled(_ enabled: Bool) {
+        if !enabled { (field as? EditableAPIKeyField)?.mask() }
+        field.isEnabled = enabled
         pasteButton.isEnabled = enabled
         saveButton.isEnabled = enabled && !isValidating && keyStatus != .checking && !field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    func controlTextDidChange(_ notification: Notification) {
+        guard field.isEnabled, field.isEditable else { return }
+        validationTask?.cancel()
+        validationID = UUID()
+        isValidating = false
+        onPaste(field.stringValue)
+        saveButton.title = secure ? "Save API key" : "Save"
+        feedback.stringValue = "Click Save to keep your key."
+        feedback.textColor = .secondaryLabelColor
+        setEnabled(pasteButton.isEnabled)
     }
 
     @objc func pasteValue(_ sender: Any?) {
@@ -925,6 +910,7 @@ import S2TCore
 
     @objc func saveValue(_ sender: Any?) {
         guard saveButton.isEnabled else { return }
+        (field as? EditableAPIKeyField)?.mask()
         let value = field.stringValue
         guard let validateValue else { finishSaving(value); return }
         validationTask?.cancel()

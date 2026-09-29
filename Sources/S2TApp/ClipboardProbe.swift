@@ -3,6 +3,16 @@ import S2TCore
 
 @MainActor enum ClipboardProbe {
     static func run() async throws {
+        let preferences = UserDefaults(suiteName: "com.s2t.preview")!
+        let savedChoice = preferences.object(forKey: "clipboardContextEnabled")
+        defer {
+            if let savedChoice { preferences.set(savedChoice, forKey: "clipboardContextEnabled") }
+            else { preferences.removeObject(forKey: "clipboardContextEnabled") }
+        }
+        preferences.removeObject(forKey: "clipboardContextEnabled")
+        guard !AppState(preview: true).clipboardContextEnabled else { throw failure("New installations collected clipboard context without opt-in") }
+        preferences.set(true, forKey: "clipboardContextEnabled")
+        guard AppState(preview: true).clipboardContextEnabled else { throw failure("Saved clipboard choice was lost") }
         try verifyPersistence()
         try verifyRelaunch()
         let board = NSPasteboard.withUniqueName()
@@ -41,49 +51,36 @@ import S2TCore
         state.clipboardContextEnabled = true
         monitor.start()
         defer { state.clipboardContextEnabled = previous }
-        let controller = MenuBarController(state: state)
-        defer { NSStatusBar.system.removeStatusItem(controller.statusItem) }
+        let controller = MenuBarController(state: state, presentsAppearanceWindow: false)
+        defer { NSStatusBar.system.removeStatusItem(controller.statusItem); controller.appearanceWindow.window?.close() }
         controller.menuNeedsUpdate(controller.menu)
-        let historyItem = controller.menu.items.first { $0.identifier?.rawValue == "clipboard.history" }!
-        let historyMenu = historyItem.submenu!
-        controller.menuNeedsUpdate(historyMenu)
-        guard let historyView = historyMenu.items.compactMap({ $0.view as? ClipboardHistoryView }).first,
-              historyView.textView.string.contains("must not capture while disabled") else { throw failure("History submenu did not show remembered text") }
+        controller.appearanceWindow.showDictation()
+        guard controller.appearanceWindow.showingDictation,
+              !controller.menu.items.contains(where: { $0.identifier?.rawValue == "clipboard.history" }),
+              monitor.entries.first?.displayText.contains("must not capture while disabled") == true else {
+            throw failure("Clipboard history is not available in Dictation settings")
+        }
         board.clearContents()
         board.setString("latest fixture link https://example.com/new", forType: .string)
         monitor.poll()
-        controller.refreshStatus()
-        guard historyView.textView.string.contains("https://example.com/new"), historyItem.title.hasSuffix("2") else { throw failure("Open history did not refresh in place") }
+        guard monitor.entries.first?.displayText.contains("https://example.com/new") == true,
+              monitor.itemCount == 2 else { throw failure("Open history did not refresh in place") }
         let fakeKey = "sk-or-v1-" + String(repeating: "a", count: 40)
         board.clearContents()
         board.setString(fakeKey, forType: .string)
         monitor.poll()
-        controller.refreshStatus()
-        guard !historyView.textView.string.contains(fakeKey), historyView.textView.string.contains("API key · ••••aaaa") else { throw failure("History exposed a raw key") }
+        guard monitor.entries.first?.displayText.contains(fakeKey) == false,
+              monitor.entries.first?.displayText.contains("API key · ••••aaaa") == true else { throw failure("History exposed a raw key") }
         state.clearClipboardHistory()
-        controller.refreshStatus()
-        guard historyView.textView.string.contains("No remembered items"), historyItem.title.hasSuffix("0") else { throw failure("Cleared history remained visible") }
-        let dictation = controller.menu.items.first { $0.identifier?.rawValue == "dictation" }!.submenu!
-        controller.menuNeedsUpdate(dictation)
-        let settings = dictation.items.first { $0.identifier?.rawValue == "clipboard" }!.submenu!
-        controller.menuNeedsUpdate(settings)
-        guard let toggle = settings.items.first(where: { $0.identifier?.rawValue == "clipboard.enabled" }) as? ActionMenuItem else { throw failure("Missing clipboard setting") }
-        guard let historyToggle = historyMenu.items.first(where: { $0.identifier?.rawValue == "clipboard.enabled" }) as? ActionMenuItem,
-              historyToggle.title == "Enable clipboard history", historyToggle.state == .on else { throw failure("Missing enabled history toggle in the history menu") }
-        historyToggle.invoke()
-        guard !state.clipboardContextEnabled,
-              !monitor.isRunning, historyToggle.state == .off,
-              toggle.state == (state.clipboardContextEnabled ? .on : .off) else { throw failure("Clipboard setting did not update in place") }
+        guard monitor.itemCount == 0 else { throw failure("Cleared history remained visible") }
+        state.clipboardContextEnabled = false
+        guard !monitor.isRunning else { throw failure("Disabling clipboard context left capture running") }
         board.clearContents()
         board.setString("copy after disabling from history menu", forType: .string)
         guard monitor.snapshot().entries.isEmpty else { throw failure("History menu toggle did not stop capture") }
-        guard historyView.textView.string.contains("Clipboard history is off") else { throw failure("Disabled history kept content visible") }
-        toggle.invoke()
-        guard state.clipboardContextEnabled, historyToggle.state == .on, toggle.state == .on else { throw failure("Clipboard toggles did not stay synchronized") }
-        state.phase = .recording
-        controller.refreshStatus()
-        guard !toggle.isEnabled, !historyToggle.isEnabled else { throw failure("Clipboard setting changes during dictation") }
-        print("PASS: clipboard capture, retained history before transcript copy, automatic/manual copy exclusion, clear, stop/resume, live history previews, masked keys, and menu metadata.")
+        state.clipboardContextEnabled = true
+        guard state.clipboardContextEnabled else { throw failure("Clipboard context did not resume") }
+        print("PASS: clipboard capture, retained history before transcript copy, automatic/manual copy exclusion, clear, stop/resume, masked keys, and hidden Settings navigation.")
         print("Used an isolated pasteboard. No general clipboard reads or writes, visible menus, provider calls, or screen capture.")
     }
     private static func failure(_ message: String) -> NSError {

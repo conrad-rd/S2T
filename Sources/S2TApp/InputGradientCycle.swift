@@ -18,9 +18,14 @@ enum InputGradientCycle {
     }()
 
     static func samples(rect: CGRect, radius: CGFloat, cornerStyle: InputCornerStyle = .continuous) -> [Sample] {
-        let key = "\(rect)-\(radius)-\(cornerStyle)" as NSString
+        samples(contour: InputContour(rect: rect, radius: radius, style: cornerStyle))
+    }
+
+    static func samples(contour: InputContour) -> [Sample] {
+        let rect = contour.bounds
+        let key = String(describing: contour) as NSString
         if let cached = cache.object(forKey: key) { return cached.values }
-        let path = InputOutlineBackdrop(rect: rect, cornerRadius: radius, cornerStyle: cornerStyle).path
+        let path = contour.path
         var points: [CGPoint] = []
         var current = CGPoint.zero, start = CGPoint.zero
         func append(_ point: CGPoint) { points.append(point); current = point }
@@ -69,7 +74,8 @@ enum InputGradientCycle {
         var delta = first.distance - last.distance
         if delta > 0.5 { delta -= 1 }
         if delta < -0.5 { delta += 1 }
-        let seam = last.distance + delta * (1 - last.angle) / (first.angle + 1 - last.angle)
+        let seamGap = first.angle + 1 - last.angle
+        let seam = seamGap > 0 ? last.distance + delta * (1 - last.angle) / seamGap : first.distance
         values.insert(Sample(angle: 0, distance: seam), at: 0)
         values.append(Sample(angle: 1, distance: seam))
         cache.setObject(Samples(values), forKey: key)
@@ -77,8 +83,14 @@ enum InputGradientCycle {
     }
 
     static func shading(rect: CGRect, radius: CGFloat, time: Double, cornerStyle: InputCornerStyle = .continuous) -> GraphicsContext.Shading {
-        let stops = samples(rect: rect, radius: radius, cornerStyle: cornerStyle).map { sample -> Gradient.Stop in
-            let rgb = GlowColorCycle.color(position: sample.distance / 0.75, time: time)
+        shading(contour: InputContour(rect: rect, radius: radius, style: cornerStyle), time: time)
+    }
+
+    static func shading(contour: InputContour, time: Double, custom: GlowGradient.Sampler? = nil) -> GraphicsContext.Shading {
+        let rect = contour.bounds
+        let stops = samples(contour: contour).map { sample -> Gradient.Stop in
+            let rgb = custom?.color(at: sample.distance + time / GlowColorCycle.duration)
+                ?? GlowColorCycle.color(position: sample.distance / 0.75, time: time)
             return .init(color: Color(red: rgb.x, green: rgb.y, blue: rgb.z), location: sample.angle)
         }
         return .conicGradient(Gradient(stops: stops), center: CGPoint(x: rect.midX, y: rect.midY))

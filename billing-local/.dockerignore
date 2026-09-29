@@ -1,0 +1,10 @@
+node_modules
+.data
+.env*
+.dev.vars*
+.wrangler
+.vercel
+*.local.json
+*.local.jsonc
+tests
+*.test.mjs

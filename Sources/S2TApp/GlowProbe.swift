@@ -124,7 +124,7 @@ import S2TCore
               let filter = layer.filters?.first as? NSObject,
               let radius = filter.value(forKey: "inputRadius") as? Double,
               filter.value(forKey: "inputMaskImage") != nil,
-              abs(radius - 12 * GlowSpeechEnvelope.blurGain(gain)) < 0.000001 else {
+              abs(radius - ChromaAppearance.Geometry.bottom.maximumBlurRadius * GlowSpeechEnvelope.blurGain(gain)) < 0.000001 else {
             throw failure("Live variable-radius filter configuration failed at meter \(level).")
         }
         guard let root = view.layer, root.sublayers?.first === layer,

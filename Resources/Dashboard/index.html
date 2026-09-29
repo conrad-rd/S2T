@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self'; connect-src 'none'; form-action 'none'; base-uri 'none'">
+<title>Dashboard · S2T</title><link rel="stylesheet" href="website.css"><link rel="stylesheet" href="dashboard.css"><script src="dashboard.js" defer></script>
+</head>
+<body>
+<header><span class="brand"><img src="s2t.svg" alt="S2T" width="112" height="46"></span><span class="badge">On this Mac</span></header>
+<main aria-label="Local usage dashboard">
+<div class="period-control sources" role="group" aria-label="Usage source"><button data-source="s2t" aria-pressed="true">S2T credits</button><button data-source="openRouter" aria-pressed="false">OpenRouter</button><button data-source="assemblyAI" aria-pressed="false">AssemblyAI</button></div>
+<p id="storage-warning" class="notice" role="status" hidden></p>
+<section class="overview" aria-label="Usage overview">
+<div class="wallet"><p class="balance" id="balance" aria-label="Total used">0.0000</p><p id="total-label" class="muted">credits used on this Mac</p><p id="held-balance" class="muted" hidden></p></div>
+<div class="last-activity"><h2>Last used</h2><p id="last-used">No usage yet</p><span id="last-used-detail" class="muted"></span></div>
+<div class="last-device"><h2>Tracking since</h2><p id="tracking-since"></p></div>
+</section>
+<section class="usage-card" aria-labelledby="usage-title">
+<div class="usage-heading"><div><h2 id="usage-title">Usage</h2><p class="usage-total"><span id="usage-total">0.0000</span> <span id="usage-unit">credits used</span></p></div><div class="period-control" role="group" aria-label="Usage period"><button data-days="7" aria-pressed="false">7 days</button><button data-days="30" aria-pressed="true">30 days</button><button data-days="90" aria-pressed="false">90 days</button></div></div>
+<div class="chart-scale"><span>Daily usage · UTC</span><span id="chart-unit">Credits</span></div>
+<div class="chart-wrap"><div id="chart-y-axis" class="chart-y-axis" aria-hidden="true"></div><div id="chart-detail" class="chart-detail" role="status" hidden></div><div id="usage-chart" class="usage-chart" role="group" aria-label="Daily usage, UTC"></div><p id="usage-empty">Usage will appear after your first request.</p></div>
+<div class="chart-axis" aria-hidden="true"><span id="chart-start"></span><span id="chart-end"></span></div>
+<p id="coverage" class="muted" role="status"></p>
+</section>
+<div class="account-details"><details><summary>Recent activity<span class="detail-hint" id="activity-count"></span></summary><div id="requests"></div></details></div>
+<p class="muted local-note">Stored only on this Mac. No account connection or imported history.</p>
+<p id="estimate-note" class="muted" hidden>AssemblyAI estimates use published rates as of September 21, 2026. Your invoice may differ. Unrecognized models or missing costs are excluded from totals.</p>
+</main>
+</body></html>

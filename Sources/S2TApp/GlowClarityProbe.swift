@@ -24,7 +24,8 @@ import S2TCore
             bitmap.size = CGSize(width: 16, height: 16)
             let source = NSImage(size: bitmap.size); source.addRepresentation(bitmap)
             guard let resized = ChromaExpansion.image(source, geometry: .bottom, size: bitmap.size, factor: 1.3),
-                  let output = resized.representations.first as? NSBitmapImageRep else { throw failure("No resampled alpha fixture") }
+                  let generated = resized.cgImage(forProposedRect: nil, context: nil, hints: nil) else { throw failure("No resampled alpha fixture") }
+            let output = NSBitmapImageRep(cgImage: generated)
             var samples = 0
             for y in 0..<16 {
                 guard let color = output.colorAt(x: 8, y: y)?.usingColorSpace(.sRGB) else { continue }
@@ -61,8 +62,10 @@ import S2TCore
                 profile.response = .init(minimum: 0.2586, maximum: 2.2187, tuning: tuning)
                 switch geometry {
                 case .bottom: break
+        case let .windowBottom(layout): profile.windowBottom = layout
                 case let .notch(layout): profile.topLayout = layout
-                case let .input(rect, radius, style): profile.inputOutline = .init(rect: rect, cornerRadius: radius, cornerStyle: style, strength: 0.568)
+                case let .withinInput(contour): profile.inputOutline = .init(contour: contour, strength: 0.568, withinInput: true)
+                case let .input(contour): profile.inputOutline = .init(contour: contour, strength: 0.568)
                 }
                 guard let frame = ChromaFrame.render(.init(geometry: geometry, size: size, profile: profile,
                     brightness: profile.speechGain, backdrop: true)) else { throw failure("Missing \(name) clarity fixture") }

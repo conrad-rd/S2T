@@ -31,7 +31,7 @@ import S2TCore
                           ChromaExpansion.images([assets.color, assets.edge], geometry: geometry,
                             size: size, factor: maximum * 0.55) != nil else { throw failure() }
                     var exterior = Path(CGRect(origin: .zero, size: size))
-                    if case let .input(rect, radius, cornerStyle) = geometry { exterior.addPath(InputOutlineBackdrop(rect: rect, cornerRadius: radius, cornerStyle: cornerStyle).path) }
+                    if case let .input(contour) = geometry { exterior.addPath(InputOutlineBackdrop(contour: contour).path) }
                     guard ChromaAppearance.radiusMap(geometry: geometry, size: size, distortion: .identity,
                         exterior: exterior, expansion: maximum * 0.55) != nil else { throw failure() }
                     times.append((CACurrentMediaTime() - started) * 1000)
@@ -41,6 +41,8 @@ import S2TCore
         }
     }
     static func verify() async throws {
+        try ContourMaskProbe.verify()
+        try ChromaFilterProbe.verify()
         let state = AppState(preview: true)
         let saved = (state.glowAppearance, state.glowMaximum, state.glowMinimum, state.glowStrength, state.glowWidth)
         defer {
@@ -64,6 +66,7 @@ import S2TCore
             topRight: CGRect(x: 1020, y: 1137, width: 780, height: 32))
         for mode in [GlowAppearance.bottom, .aroundNotch, .aroundInput] {
             state.glowAppearance = mode
+            appearance.selectPreview(mode)
             let renderer = ChromaFrameRenderer()
             var latest: ChromaFrameRequest!
             var actionTimes: [Double] = []
@@ -115,7 +118,7 @@ import S2TCore
                   state.glowMaximum == 2.6, AppState(preview: true).glowMaximum == 2.6 else { throw failure() }
             guard actionTimes.max()! < 16.7, ticks.max()! < 50 else {
                 throw NSError(domain: "AppearancePerformance", code: 2,
-                    userInfo: [NSLocalizedDescriptionKey: "Main thread blocked: actions \(actionTimes), timer \(ticks.max()!) ms"])
+                    userInfo: [NSLocalizedDescriptionKey: "Main thread blocked: actions \(actionTimes), timer \(ticks.max()!) ms, first intervals \(Array(ticks.prefix(8)))"])
             }
             print(String(format: "%@ 5 native slider changes: max main-thread action %.3f ms, max 5 ms timer interval %.2f ms, latest field ready %.0f ms, published frames %d",
                 mode.rawValue, actionTimes.max()!, ticks.max()!, (CACurrentMediaTime() - started) * 1000, renderer.completedFrames))
@@ -139,16 +142,16 @@ import S2TCore
             guard let colorFrame = renderer.frame, colorFrame.request == comparison else { throw failure() }
             let original: AnyView
             switch latest.geometry {
-            case .bottom:
+            case .bottom, .windowBottom:
                 original = AnyView(BottomGlow(level: 0.55, strength: 1.3, phase: .recording, timeOverride: 1,
-                    renderedProfile: latest.profile, response: latest.profile.response))
+                    renderedProfile: latest.profile, windowBottom: latest.profile.windowBottom, response: latest.profile.response))
             case let .notch(layout):
                 original = AnyView(TopGlow(renderedProfile: latest.profile, showsBackdrop: false,
                     layout: layout, strength: 1.3, phase: .recording, levelProvider: { 0.55 },
                     timeOverride: 1, response: latest.profile.response))
-            case let .input(rect, radius, cornerStyle):
+            case let .input(contour), let .withinInput(contour):
                 let layout = InputOutlineLayout()
-                layout.outlineRect = rect; layout.cornerRadius = radius; layout.cornerStyle = cornerStyle
+                layout.contour = contour
                 state.phase = .recording
                 original = AnyView(InputOutline(renderedProfile: latest.profile, showsBackdrop: false,
                     state: state, layout: layout, timeOverride: 1))

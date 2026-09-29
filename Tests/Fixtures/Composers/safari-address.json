@@ -1,0 +1,17 @@
+{
+  "name": "Safari native address field, roles and geometry only, September 16 2026",
+  "editor": 0,
+  "expected": [[534, 47], [732, 52]],
+  "nodes": [
+    {"id":0,"role":"AXTextField","subrole":"","editable":false,"frame":[[565,65],[695,31]],"parent":1,"children":[],"childrenComplete":true},
+    {"id":1,"role":"AXGroup","subrole":"","editable":false,"frame":[[534,47],[732,52]],"parent":3,"children":[2,0],"childrenComplete":true},
+    {"id":2,"role":"AXButton","subrole":"","editable":false,"frame":[[544,58.5],[23.5,30]],"parent":1,"children":[],"childrenComplete":true},
+    {"id":3,"role":"AXToolbar","subrole":"","editable":false,"frame":[[8,47],[1784,52]],"parent":null,"children":[1,4,5,6,7,8,9],"childrenComplete":true},
+    {"id":4,"role":"AXButton","subrole":"","editable":false,"frame":[[377,47],[36,52]],"parent":3,"children":[],"childrenComplete":true},
+    {"id":5,"role":"AXButton","subrole":"","editable":false,"frame":[[421,47],[36,52]],"parent":3,"children":[],"childrenComplete":true},
+    {"id":6,"role":"AXButton","subrole":"","editable":false,"frame":[[457,47],[36,52]],"parent":3,"children":[],"childrenComplete":true},
+    {"id":7,"role":"AXButton","subrole":"","editable":false,"frame":[[493,47],[41,52]],"parent":3,"children":[],"childrenComplete":true},
+    {"id":8,"role":"AXButton","subrole":"","editable":false,"frame":[[1274,47],[36,52]],"parent":3,"children":[],"childrenComplete":true},
+    {"id":9,"role":"AXButton","subrole":"","editable":false,"frame":[[1318,47],[36,52]],"parent":3,"children":[],"childrenComplete":true}
+  ]
+}

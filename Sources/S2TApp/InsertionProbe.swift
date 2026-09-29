@@ -4,6 +4,10 @@ import S2TCore
 @MainActor enum InsertionProbe {
     static func run(fixtureURL: URL) async throws {
         guard AXIsProcessTrusted() else { throw failure("S2T Accessibility permission is missing.") }
+        let fixtureDefaults = UserDefaults(suiteName: "com.s2t.preview")!
+        let savedDefaults = fixtureDefaults.persistentDomain(forName: "com.s2t.preview") ?? [:]
+        fixtureDefaults.setPersistentDomain([:], forName: "com.s2t.preview")
+        defer { fixtureDefaults.setPersistentDomain(savedDefaults, forName: "com.s2t.preview") }
         defer { TextInsertion.menuIsOpen = false }
         let previousApp = NSWorkspace.shared.frontmostApplication
         let history = AppFocusHistory()
@@ -33,6 +37,17 @@ import S2TCore
         TextInsertion.diagnosticOutput = { print("method: \($0)") }
         defer { TextInsertion.diagnosticOutput = nil }
         print("fixture pid=\(process.processIdentifier)")
+        try await verifyRecordingFocus(editor: editor, fixturePID: process.processIdentifier)
+        if CommandLine.arguments.contains("--finish-only") {
+            let checkWindow = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 300, height: 90), styleMask: [.titled], backing: .buffered, defer: false)
+            checkWindow.isReleasedWhenClosed = false
+            checkWindow.title = "S2T destination verification"
+            checkWindow.center()
+            defer { checkWindow.close() }
+            try await verifyFinishDestination(editor: editor, search: search, board: board,
+                                              fixturePID: process.processIdentifier, checkWindow: checkWindow)
+            return
+        }
         var failures = 0
         let cases: [(String, AXUIElement, Bool)] = CommandLine.arguments.contains("--start-only") ? [] : [("native editor without AX writes", readOnly, false), ("native editor", editor, false), ("missing initial target", editor, true), ("search selection", search, false)]
         for (name, element, missingCapture) in cases {
@@ -51,6 +66,21 @@ import S2TCore
             print("\(name): \(matches ? "PASS" : "FAIL"), outcome=\(result.rawValue), fixture text=\(stringValue(element) ?? "nil")")
             if !matches { failures += 1 }
         }
+        guard let selectionless = find("probe.selectionless", in: root) else { throw failure("Selectionless fixture missing") }
+        AXUIElementSetAttributeValue(selectionless, kAXFocusedAttribute as CFString, kCFBooleanTrue)
+        try await Task.sleep(nanoseconds: 100_000_000)
+        let selectionlessTarget = await TextInsertion.rememberStart(TextInsertion.captureTarget())
+        guard selectionlessTarget?.selection == nil else { throw failure("Fixture unexpectedly exposes a cursor range") }
+        let selectionlessResult = try await TextInsertion.insert(" inserted", into: selectionlessTarget, pasteboard: board)
+        try await Task.sleep(nanoseconds: 150_000_000)
+        guard selectionlessResult == .textSent, stringValue(selectionless)?.contains(" inserted") == true else {
+            throw failure("Focused editor without AX cursor metadata rejected delivery")
+        }
+        AXUIElementSetAttributeValue(search, kAXFocusedAttribute as CFString, kCFBooleanTrue)
+        let clipboardBeforeRejectedPaste = board.changeCount
+        guard try await TextInsertion.insert("must not paste", into: selectionlessTarget, pasteboard: board) == .noTarget,
+              board.changeCount == clipboardBeforeRejectedPaste else { throw failure("Selectionless target followed changed focus") }
+        print("Selectionless editor accepts native paste only while original field remains focused: PASS")
         AXUIElementSetAttributeValue(editor, kAXValueAttribute as CFString, "before selected after" as CFString)
         AXUIElementSetAttributeValue(editor, kAXFocusedAttribute as CFString, kCFBooleanTrue)
         var originalRange = CFRange(location: 7, length: 8)
@@ -106,6 +136,7 @@ import S2TCore
         defer { startWindow.close() }
         try await Task.sleep(nanoseconds: 200_000_000)
         guard let startTarget = TextInsertion.captureTarget(previousApp: history.previousApp), startTarget.restoreFromS2T else { throw failure("Start window did not become active.") }
+        guard startTarget.app.processIdentifier == process.processIdentifier else { throw failure("Start focus history did not retain the generated editor. No text sent.") }
 
         let startResult = try await TextInsertion.insert("S2T test", into: startTarget, pasteboard: board)
         try await Task.sleep(nanoseconds: 150_000_000)
@@ -113,7 +144,12 @@ import S2TCore
         print("Start return: \(startMatches ? "PASS" : "FAIL"), outcome=\(startResult.rawValue)")
         guard startMatches else { throw failure("Start return failed.") }
 
+        try await verifyFinishDestination(editor: editor, search: search, board: board,
+                                          fixturePID: process.processIdentifier, checkWindow: startWindow)
+
         AXUIElementSetAttributeValue(editor, kAXValueAttribute as CFString, "before selected after" as CFString)
+        if let fixtureApp = NSRunningApplication(processIdentifier: process.processIdentifier) { fixtureApp.activate(options: []) }
+        try await Task.sleep(nanoseconds: 150_000_000)
         AXUIElementSetAttributeValue(editor, kAXFocusedAttribute as CFString, kCFBooleanTrue)
         try await Task.sleep(nanoseconds: 100_000_000)
         if let range = AXValueCreate(.cfRange, &selected) { AXUIElementSetAttributeValue(editor, kAXSelectedTextRangeAttribute as CFString, range) }
@@ -132,6 +168,7 @@ import S2TCore
         state.processingProvider = .openRouter
         state.mode = .verbatim
         state.rawTranscript = "S2T test"
+        state.phase = .failed
         state.retry()
         for _ in 0..<300 {
             if state.phase == .complete { break }
@@ -149,10 +186,11 @@ import S2TCore
         guard NSWorkspace.shared.frontmostApplication?.processIdentifier == process.processIdentifier else { throw failure("Fixture lost focus before processing failure check.") }
         let oldProvider = state.processingProvider
         defer { state.processingProvider = oldProvider }
-        state.processingProvider = .cerebras
-        state.cerebrasKey = ""
+        state.processingProvider = .openRouter
+        state.routerKey = ""
         state.mode = .clean
         state.rawTranscript = "S2T test"
+        state.phase = .failed
         state.retry()
         for _ in 0..<300 {
             if state.phase == .complete || state.phase == .failed { break }
@@ -172,6 +210,7 @@ import S2TCore
             TextInsertion.menuIsOpen = true
             state.mode = .verbatim
             state.rawTranscript = "S2T test"
+            state.phase = .failed
             state.retry()
             for _ in 0..<300 {
                 if state.isWaitingToPaste { break }
@@ -211,7 +250,7 @@ import S2TCore
                 pipeline.mode = .clean
                 pipeline.assemblyKey = "fixture-assembly"
                 pipeline.routerKey = "fixture-router"
-                pipeline.cerebrasKey = "fixture-cerebras"
+                pipeline.xaiKey = "fixture-xai"
                 pipeline.processingModel = provider.defaultModel
                 pipeline.processRecording(WaveAudio.encode(samples: Array(repeating: 120, count: 16000), sampleRate: 16000))
                 for _ in 0..<300 {
@@ -247,6 +286,87 @@ import S2TCore
 
 
 
+    }
+
+    private static func verifyRecordingFocus(editor: AXUIElement, fixturePID: pid_t) async throws {
+        let defaults = UserDefaults(suiteName: "com.s2t.preview")!
+        let saved = defaults.persistentDomain(forName: "com.s2t.preview") ?? [:]
+        defer { defaults.setPersistentDomain(saved, forName: "com.s2t.preview") }
+        let state = AppState(preview: true)
+        state.phase = .recording
+        let glow = GlowWindowController(state: state)
+        let outline = InputOutlineWindowController(state: state)
+        AXUIElementSetAttributeValue(editor, kAXFocusedAttribute as CFString, kCFBooleanTrue)
+        for mode in [GlowAppearance.bottom, .aroundNotch, .aroundInput, .withinInput] {
+            state.glowAppearance = mode
+            let panel: NSPanel
+            if mode.followsInput { panel = outline.prepare(field: CGRect(x: 160, y: 180, width: 420, height: 90)) }
+            else {
+                guard let screenPanel = glow.prepareWindow(screens: NSScreen.screens, pointer: .zero) else { throw failure("Missing recording focus fixture") }
+                panel = screenPanel
+            }
+            panel.alphaValue = 0
+            defer { panel.orderOut(nil) }
+            for phase in [DictationPhase.recording, .transcribing, .recording] {
+                state.phase = phase
+                panel.orderFrontRegardless()
+                try await Task.sleep(for: .milliseconds(30))
+                var focused: CFTypeRef?
+                let app = AXUIElementCreateApplication(fixturePID)
+                AXUIElementSetMessagingTimeout(app, 0.1)
+                guard AXUIElementCopyAttributeValue(app, kAXFocusedUIElementAttribute as CFString, &focused) == .success,
+                      let focused, CFEqual(focused, editor),
+                      NSWorkspace.shared.frontmostApplication?.processIdentifier == fixturePID,
+                      !panel.canBecomeKey, !panel.canBecomeMain, !panel.isKeyWindow, !panel.isMainWindow else {
+                    throw failure("\(mode.rawValue) changed keyboard focus during recording")
+                }
+            }
+        }
+        print("Recording focus: Bottom, Notch, Around Input and Within Input keep the generated editor focused through presentation and phase changes. Invisible production panels; no microphone or real-field reads: PASS")
+    }
+
+    private static func verifyFinishDestination(editor: AXUIElement, search: AXUIElement, board: NSPasteboard,
+                                                fixturePID: pid_t, checkWindow: NSWindow) async throws {
+        guard let fixtureApp = NSRunningApplication(processIdentifier: fixturePID) else { throw failure("Fixture app exited") }
+        fixtureApp.activate(options: [])
+        for _ in 0..<40 {
+            if NSWorkspace.shared.frontmostApplication?.processIdentifier == fixturePID { break }
+            try await Task.sleep(nanoseconds: 25_000_000)
+        }
+        guard NSWorkspace.shared.frontmostApplication?.processIdentifier == fixturePID else { throw failure("Fixture lost focus before the end key") }
+        AXUIElementSetAttributeValue(editor, kAXValueAttribute as CFString, "before selected after" as CFString)
+        AXUIElementSetAttributeValue(editor, kAXFocusedAttribute as CFString, kCFBooleanTrue)
+        var selected = CFRange(location: 7, length: 8)
+        if let range = AXValueCreate(.cfRange, &selected) { AXUIElementSetAttributeValue(editor, kAXSelectedTextRangeAttribute as CFString, range) }
+        guard let finishTarget = await TextInsertion.rememberFinish(TextInsertion.captureTarget()),
+              let destination = finishTarget.promptDestination else { throw failure("End-key field was not captured") }
+        AXUIElementSetAttributeValue(search, kAXFocusedAttribute as CFString, kCFBooleanTrue)
+        let untouchedSearch = stringValue(search)
+        checkWindow.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        for _ in 0..<40 {
+            if NSWorkspace.shared.frontmostApplication?.processIdentifier == ProcessInfo.processInfo.processIdentifier { break }
+            try await Task.sleep(nanoseconds: 25_000_000)
+        }
+        try await Task.sleep(nanoseconds: 200_000_000)
+        guard NSWorkspace.shared.frontmostApplication?.processIdentifier == ProcessInfo.processInfo.processIdentifier else {
+            throw failure("End-key fixture could not activate S2T before switching back to its saved field")
+        }
+        guard let lease = try await PromptDeliveryLease.prepare(destination) else {
+            throw failure("The end-key field could not be restored after an app switch")
+        }
+        let endResult = try await TextInsertion.insert("End-key destination", into: finishTarget, pasteboard: board)
+        await lease.restore()?.value
+        for _ in 0..<40 {
+            if NSWorkspace.shared.frontmostApplication?.processIdentifier == ProcessInfo.processInfo.processIdentifier { break }
+            try await Task.sleep(nanoseconds: 25_000_000)
+        }
+        guard endResult == .textSent, stringValue(editor) == "before End-key destination after",
+              stringValue(search) == untouchedSearch,
+              NSWorkspace.shared.frontmostApplication?.processIdentifier == ProcessInfo.processInfo.processIdentifier else {
+            throw failure("End-key delivery: outcome=\(endResult.rawValue), editor=\(stringValue(editor) ?? "nil"), search=\(stringValue(search) ?? "nil"), savedForeground=\(lease.savedForegroundPID ?? -1), foreground=\(NSWorkspace.shared.frontmostApplication?.processIdentifier ?? -1)")
+        }
+        print("End-key field survives another field and app switch, then restores prior app: PASS")
     }
 
     private static func stringValue(_ element: AXUIElement) -> String? {

@@ -1,20 +1,27 @@
 # S2T Credits
 
-Run `npm start` from this folder, then open http://localhost:4317. The main website's Credits button opens this page. Node 22.13 or newer is required. The service listens only on 127.0.0.1.
+The Cloudflare test service is [S2T Credits](https://s2t-credits.ae-chef-license.workers.dev). See [SETUP.md](SETUP.md) for app sign-in, Stripe Checkout, secrets, and deployment. The service uses a SQLite Durable Object and targets the Workers Free limits. Real provider access remains disabled until dedicated credentials and reviewed spending controls are configured.
+
+The September 27 remediation candidate retires direct AssemblyAI streaming authorization and all client-reported streaming settlement endpoints. Ordinary paid transcription uploads and explicitly priced model routes remain available. Previously issued streaming tokens retain their holds until an operator uses independent provider evidence to reconcile or writes them off. Historical client-settled rows can have their provider expense corrected; any excess customer charge is refunded, and an undercharge is absorbed rather than retroactively debited. New real-provider reservations require funding evidence reviewed within 24 hours and aged settlements require independent receipt and provider-total reconciliation. Exact idempotent request retries remain available when either review is overdue. These are source changes, not a statement that the hosted service was updated.
+
+An existing paid request can also replay its saved result when its model is no longer offered. New requests still use the current priced policy. Newly reserved requests keep only a canonical body hash for replay checks; legacy speech rows use their original strict model/audio fingerprint. No recording body is retained for this check.
+
+
+Run `npm start` from this folder, then open http://localhost:4317. Node 22.13 or newer is required. The service listens only on 127.0.0.1.
 
 The local dashboard now uses the transactional billing ledger. Add demo credits, create a key, run a metered synthetic request, inspect the remaining balance, and revoke the key. A synthetic request costs 0.01 demo credit. No real provider request or payment occurs in demo mode.
 
 ## Implemented controls
 
-- Integer micro-dollar accounting. $1 purchases 100 credits, funding $0.90 of provider usage. One credit is 9,000 micro-dollars. Fractional charges never round to whole credits.
+- Integer micro-dollar accounting. $1 purchases 100 credits, funding $0.50 of provider usage. One credit is 5,000 micro-dollars. Fractional charges never round to whole credits.
 - Immutable balance entries and an audit log. SQLite WAL, FULL synchronization, foreign keys, transactions, and unique payment/request/receipt identifiers enforce consistency across database connections.
 - Atomic reservations before dispatch. The same money cannot fund simultaneous requests. Actual cost settles once; unused reservations return to available funds.
 - A client must supply a stable `Idempotency-Key`. Reusing it with changed input is rejected. Completed retries return the encrypted saved result for one hour. Unknown outcomes never resubmit.
 - A durable submitted state is committed before a provider call. On restart, unsubmitted reservations release; submitted requests become uncertain and stop new spending. A second server cannot claim the same database while its owner is alive.
 - Cancellation only releases work that has not been submitted. Disconnects and timeouts do not prove that a provider did no work.
 - Strict provider destinations, separate credentials, redirect rejection, response/upload limits, model allowlists, output limits, and server-side mono PCM WAV duration validation. Unknown models or expired pricing cannot reach providers.
-- Initial internal limits, including configured provider funding fees: $0.25 per request, $1 per account per UTC day, $3 per provider per UTC day, $5 service-wide per UTC day, $20 lifetime service spend. Two pending requests per account, 20 new requests per account per minute, plus HTTP/key/session rate limits. Unknown prior-day costs remain reserved against the next day's limit.
-- Signed Stripe events are verified with the Stripe SDK. The server retrieves the authoritative Checkout Session and successful PaymentIntent before granting funds. Session and PaymentIntent uniqueness prevent duplicate grants across event types. Paid USD top-ups must be $1–$100.
+Customer spending has no default per-request, daily, provider or lifetime monetary ceiling. Available balance and explicit user key limits apply. Provider accounts remain prepaid.
+- Signed Stripe events are verified with the Stripe SDK. The server retrieves the authoritative Checkout Session and successful PaymentIntent before granting funds. Session and PaymentIntent uniqueness prevent duplicate grants across event types. New USD top-ups must be $5–$100. Existing checkout quotes retain their original conversion and may still settle below the new minimum.
 - Partial refunds debit the ledger once. Disputes freeze affected accounts. Reversals arriving before checkout completion apply when the purchase is recorded. Dispute reversals are deliberately not automatically undone; operator review is required.
 - Key hashing, expiration, revocation, account-scoped access, HttpOnly local sessions, exact-origin browser writes, bounded requests, CSP, and authenticated OIDC/JWKS identity for the live API.
 - AES-256-GCM encryption for saved results, authenticated to each request ID. Results are inaccessible after one hour. Accounting records contain no input text or audio. Encrypted result bytes remain in the database until a production retention policy is implemented.
@@ -35,11 +42,11 @@ Store data on a persistent local volume. `S2T_BILLING_DATA_DIR` overrides `.data
 
 ## API
 
-User-account endpoints use the local browser cookie in demo/test mode, or a verified OIDC bearer token in live mode. The browser UI is a local demo client; production sign-in/account recovery and a live checkout interface still need integration with the selected identity provider.
+User-account endpoints use the local browser cookie in demo/test mode, or a verified OIDC bearer token in live mode. The browser UI is a local demo client; the browser now supports Clerk sign-in and recovery through Clerk account controls. Configure the `s2t` JWT template and publishable key as described in SETUP.md.
 
 - `GET /api/account`: account balance, reservations, keys, and recent requests.
 - `POST /api/keys`: issue a key once. `POST /api/keys/revoke` with `{ "id": "key-id" }` revokes it.
-- `POST /api/checkout`: live-only. Verifies the configured Payment Link matches the supplied URL and permits a bounded USD purchase before adding the authenticated account reference.
+- `POST /api/checkout`: test/live with configured Stripe secrets. Accepts `{ "cents": 500 }` and a stable `Idempotency-Key`, then creates an account-bound Checkout Session for that exact amount. A stored purchase cannot change its amount or payment session.
 - `POST /api/stripe/webhook`: signed Stripe events. Never use the browser success page as proof of payment.
 
 Provider endpoints require `Authorization: Bearer <S2T-key>`:
@@ -61,7 +68,7 @@ Transcription request body:
 {"provider":"assemblyai","operation":"transcription","audio":"<base64 mono 16-bit PCM WAV>"}
 ```
 
-The current reviewed route shapes are OpenRouter cleanup through `openai/gpt-oss-120b` on `cerebras/fp16`, AssemblyAI Sync, and ElevenLabs Scribe v2. Audio is limited to two minutes. Other models, long batch transcription, OpenRouter audio/image requests, and native Mac app integration are not enabled. No silent provider fallback occurs.
+The current reviewed route shapes are OpenRouter cleanup through `openai/gpt-oss-120b` on `cerebras/fp16`, AssemblyAI Sync. Audio is limited to two minutes. Other models, long batch transcription, OpenRouter audio/image requests, are not enabled. Native Mac integration supports these reviewed routes by choosing S2T credits in the provider dropdown under Settings → Models. Save the S2T key under Settings → API keys. No silent provider fallback occurs.
 
 ## Operation and recovery
 
@@ -99,15 +106,18 @@ Live mode requires these environment settings, read only on the server:
 - `S2T_BILLING_MODE=live`, `S2T_ENABLE_LIVE_SPENDING=explicitly-enabled`
 - `S2T_PUBLIC_ORIGIN`, an exact HTTPS origin
 - `S2T_OIDC_ISSUER`, `S2T_OIDC_AUDIENCE`, `S2T_OIDC_JWKS_URL`
-- `STRIPE_SECRET_KEY`, preferably a restricted live key with only required read permissions; `STRIPE_WEBHOOK_SECRET`; `STRIPE_LIVE_PAYMENT_LINK_ID`
+- `STRIPE_SECRET_KEY`, a restricted live key with Checkout Session creation and the read permissions needed for payment, refund, and dispute verification; `STRIPE_WEBHOOK_SECRET`; `CLERK_PUBLISHABLE_KEY`
 - `S2T_PRICING_FILE`, a reviewed policy matching `policy.mjs`, with an expiry no more than 24 hours away
 - `S2T_PROVIDER_LIMITS_FILE`, operator evidence of dedicated provider limits reviewed within 24 hours
 - `S2T_RESULT_KEY`, 32 random bytes encoded as 64 hex characters, stored in a secret manager
-- Keys only for enabled providers: `OPENROUTER_API_KEY`, `ASSEMBLYAI_API_KEY`, `ELEVENLABS_API_KEY`
+- `S2T_GUEST_CREDENTIAL_KEY`, a separate 32-byte secret for new and migrated guest credentials; retain the old result key until migration reaches zero legacy rows
+- Keys only for enabled providers: `OPENROUTER_API_KEY`, `ASSEMBLYAI_API_KEY`
 
-External-limit evidence must contain `reviewedAt` and a `providers` object. Each enabled provider needs `autoRecharge: false`, `overdraftDisabled: true`, a positive `hardCapUsd`, and an `evidence` description. Initial combined external caps cannot exceed $20. This is operator-supplied evidence, not an automatic check or configuration of the provider's limits. If a provider cannot enforce a suitable cap, keep it disabled. A warning email or budget alert is not a spending cap.
+Provider funding evidence contains `reviewedAt` and a `providers` object. Each enabled provider needs prepaid funding or an explicitly configured cap, `autoRecharge: false`, and an evidence description. Do not invent a spending cap for users who did not choose one.
 
-Before taking customer money: connect sign-in/recovery, confirm the actual Payment Link configuration and tax treatment, verify dedicated provider limits, replace fixture prices with reviewed contracted rates and billing rounding, run spending-capped staging calls, automate provider report collection, configure monitoring and consistent backups, implement result retention, integrate the native app, and obtain an independent security review. Unsupported taxes, discounts, and shipping are rejected rather than silently granting the wrong amount; resolve that business policy before enabling checkout.
+The checked-in `wrangler.jsonc` still contains the dated September 19 funding review. The live service can start for balance reads, recovery, webhook settlement, and operator reconciliation, but rejects new spending with that stale attestation. An operator must independently inspect actual provider funding and limits, then update the evidence and `reviewedAt`; this remediation did not change the date or claim a new review.
+
+Before taking customer money: exercise configured Clerk sign-in/recovery and Stripe checkout, confirm tax treatment, verify dedicated provider limits, replace fixture prices with reviewed contracted rates and billing rounding, run spending-capped staging calls, automate provider report collection, configure monitoring and consistent backups, implement result retention, and obtain an independent security review. Unsupported taxes, discounts, and shipping are rejected rather than silently granting the wrong amount; resolve that business policy before enabling checkout.
 
 This server intentionally refuses live mode on Vercel. SQLite on a function's temporary filesystem cannot be the financial authority. Keep the website on Vercel; either deploy this service on one persistent host or port the transaction layer to managed PostgreSQL and retest concurrency and recovery before deploying Vercel functions.
 

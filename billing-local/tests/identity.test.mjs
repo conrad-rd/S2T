@@ -33,3 +33,13 @@ test("verified identity rejects foreign issuer, audience, signature and expired 
   const wrong = await generateKeyPair("RS256");
   await assert.rejects(verify(await token(config.issuer, config.audience, "1h", wrong.privateKey)));
 });
+
+test('private live credits accept only the signed verified email claim', async () => {
+  const pair = await generateKeyPair('RS256');
+  const jwk = { ...await exportJWK(pair.publicKey), kid: 'email-fixture' };
+  const config = { issuer: 'https://clerk.example.com', audience: 's2t-credits', jwks: 'https://clerk.example.com/jwks', allowedEmail: 'owner@example.com' };
+  const verify = createIdentity(config, createLocalJWKSet({ keys: [jwk] }));
+  const sign = claims => new SignJWT(claims).setProtectedHeader({ alg: 'RS256', kid: jwk.kid }).setSubject('user_fixture').setIssuer(config.issuer).setAudience(config.audience).setIssuedAt().setExpirationTime('1m').sign(pair.privateKey);
+  assert.equal(await verify(await sign({ email: 'owner@example.com', email_verified: true })), config.issuer + ':user_fixture');
+  for (const claims of [{}, { email: 'other@example.com', email_verified: true }, { email: 'owner@example.com', email_verified: false }, { email: 'owner@example.com', email_verified: 'true' }]) await assert.rejects(verify(await sign(claims)), /not approved/);
+});

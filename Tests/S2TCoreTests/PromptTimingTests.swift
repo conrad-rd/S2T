@@ -34,9 +34,19 @@ final class PromptTimingTests: XCTestCase {
         XCTAssertNil(PromptTiming.nearestFrame(to: 1, times: []))
     }
 
+    func testLeadingToleranceCoversReferencesBeforeTheFirstFrame() {
+        let times = [100.0, 100.25, 100.5]
+        XCTAssertNil(PromptTiming.nearestFrame(to: 98.5, times: times))
+        XCTAssertEqual(PromptTiming.nearestFrame(to: 98.5, times: times, leadingTolerance: 2), 0)
+        XCTAssertNil(PromptTiming.nearestFrame(to: 97.9, times: times, leadingTolerance: 2))
+        // The wider window applies only before recording started, never after the last frame.
+        XCTAssertNil(PromptTiming.nearestFrame(to: 101.5, times: times, leadingTolerance: 2))
+        XCTAssertEqual(PromptTiming.nearestFrame(to: 100.3, times: times, leadingTolerance: 2), 1)
+    }
+
     func testTimestampOptionsAreOptInAndAssemblyMillisecondsBecomeSeconds() async throws {
         let audio = WaveAudio.encode(samples: Array(repeating: 0, count: 16000), sampleRate: 16000)
-        let response = ScriptedTransport.Response(path: "/transcribe", status: 200, json: #"{"text":"look here","words":[{"text":"look","start":120,"end":300},{"text":"here","start":350,"end":620}]}"#)
+        let response = ScriptedTransport.Response(path: "/v1/transcribe", status: 200, json: #"{"text":"look here","words":[{"text":"look","start":120,"end":300},{"text":"here","start":350,"end":620}]}"#)
         let transport = ScriptedTransport([response, response])
         let api = DictationAPI(transport: transport)
         let result = try await api.transcribeDetailed(audio: audio, apiKey: "fixture", includeTimestamps: true)
@@ -48,35 +58,14 @@ final class PromptTimingTests: XCTestCase {
         XCTAssertNotNil(requests[0].httpBody?.range(of: audio))
     }
 
-    func testElevenLabsSecondTimestampsAndMalformedEntriesPreserveText() async throws {
-        let transport = ScriptedTransport([.init(path: "/v1/speech-to-text", status: 200, json: #"{"text":"here","words":[{"text":"here","start":1.2,"end":1.5},{"text":"bad","start":"unknown","end":2},{"word":"later","start":2,"end":2.4},{"start":3,"end":4}]}"#)])
-        let result = try await DictationAPI(transport: transport).transcribeDetailed(audio: Data([1]), apiKey: "fixture", provider: .elevenLabs, includeTimestamps: true)
+    func testLocalSecondTimestampsAndMalformedEntriesPreserveText() async throws {
+        let transport = ScriptedTransport([.init(path: "/v1/audio/transcriptions", status: 200, json: #"{"text":"here","words":[{"text":"here","start":1.2,"end":1.5},{"text":"bad","start":"unknown","end":2},{"word":"later","start":2,"end":2.4},{"start":3,"end":4}]}"#)])
+        let result = try await DictationAPI(transport: transport).transcribeDetailed(audio: Data([1]), apiKey: "fixture", provider: .local, localURL: "http://localhost:4317/v1/audio/transcriptions", includeTimestamps: true)
         XCTAssertEqual(result.text, "here")
         XCTAssertEqual(result.words, [.init(text: "here", start: 1.2, end: 1.5), .init(text: "later", start: 2, end: 2.4)])
         let requests = await transport.requests
-        XCTAssertTrue(String(decoding: requests[0].httpBody!, as: UTF8.self).contains("name=\"timestamps_granularity\"\r\n\r\nword"))
+        XCTAssertNil(requests[0].value(forHTTPHeaderField: "Authorization"))
     }
 
-    func testBatchAnalysisHasOneMetadataReadAndOneOrderedImageRequest() async throws {
-        let notes = ["The processing animation.", "The nearby notch preview."]
-        let content = try JSONSerialization.data(withJSONObject: ["descriptions": notes])
-        let response = try JSONSerialization.data(withJSONObject: ["choices": [["finish_reason": "stop", "message": ["content": String(decoding: content, as: UTF8.self)]]]])
-        let transport = ScriptedTransport([
-            .init(path: "/api/v1/models/vendor/vision/endpoints", status: 200, json: #"{"data":{"architecture":{"input_modalities":["text","image"],"output_modalities":["text"]}}}"#),
-            .init(path: "/api/v1/chat/completions", status: 200, json: String(decoding: response, as: UTF8.self))
-        ])
-        let images = [PromptImageInput(number: 1, png: Data([1]), pointer: .zero, seconds: 1, phrase: "here"), PromptImageInput(number: 2, png: Data([2]), pointer: .zero, seconds: 1.3, phrase: "here")]
-        let result = try await DictationAPI(transport: transport).describePromptImages(images, transcript: "like here or here", model: "vendor/vision", apiKey: "fixture")
-        XCTAssertEqual(result, notes)
-        let requests = await transport.requests
-        XCTAssertEqual(requests.count, 2)
-        XCTAssertNil(requests[0].value(forHTTPHeaderField: "Authorization"))
-        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: requests[1].httpBody!) as? [String: Any])
-        XCTAssertNil(body["provider"])
-        XCTAssertEqual(body["model"] as? String, "vendor/vision")
-        let messages = try XCTUnwrap(body["messages"] as? [[String: Any]])
-        let parts = try XCTUnwrap(messages.last?["content"] as? [[String: Any]])
-        let urls = parts.compactMap { ($0["image_url"] as? [String: String])?["url"] }
-        XCTAssertEqual(urls, ["data:image/png;base64,AQ==", "data:image/png;base64,Ag=="])
-    }
+
 }

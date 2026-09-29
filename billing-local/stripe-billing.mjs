@@ -8,19 +8,21 @@ export function createStripeBilling({
   apiKey,
   stripeClient,
   paymentLinkURL,
+  origin,
+  onFulfilled,
 }) {
   const stripe =
     stripeClient || (apiKey ? new Stripe(apiKey, { maxNetworkRetries: 0, timeout: 10000 }) : null);
   async function webhook(raw, signature) {
     requireThat(
-      secret && stripe && paymentLinkId,
+      secret && stripe,
       "stripe_disabled",
       "Stripe fulfillment is not configured.",
       503,
     );
     let event;
     try {
-      event = Stripe.webhooks.constructEvent(raw, signature, secret, 300);
+      event = await Stripe.webhooks.constructEventAsync(raw, signature, secret, 300);
     } catch {
       requireThat(false, "signature", "Invalid Stripe signature.", 400);
     }
@@ -44,7 +46,7 @@ export function createStripeBilling({
       requireThat(
         session.id === id &&
           session.livemode === (mode === "live") &&
-          session.payment_link === paymentLinkId &&
+          (session.payment_link ? session.payment_link === paymentLinkId : !!session.metadata?.s2t_order) &&
           session.mode === "payment" &&
           session.currency === "usd",
         "checkout",
@@ -75,12 +77,14 @@ export function createStripeBilling({
         "account",
         "Checkout has no S2T account reference.",
       );
+      if (!session.payment_link) ledger.verifyCheckout(session.metadata.s2t_order, session.client_reference_id, session.amount_total, session.id);
       ledger.grant({
         account: session.client_reference_id,
         cents: session.amount_total,
         session: id,
         intent: pi.id,
       });
+      await onFulfilled?.(session);
     } else if (["refund.created", "refund.updated", "refund.failed"].includes(event.type)) {
       const r = await stripe.refunds.retrieve(event.data.object.id);
       requireThat(r.currency === "usd", "refund", "Unexpected refund currency.");
@@ -92,18 +96,38 @@ export function createStripeBilling({
         );
         ledger.reverse({ id: r.id, intent: r.payment_intent, cents: r.amount, kind: "refund" });
       }
-    } else if (["charge.dispute.created", "charge.dispute.funds_withdrawn"].includes(event.type)) {
+    } else if (["charge.dispute.created", "charge.dispute.updated", "charge.dispute.closed", "charge.dispute.funds_withdrawn", "charge.dispute.funds_reinstated"].includes(event.type)) {
       const d = await stripe.disputes.retrieve(event.data.object.id);
       requireThat(
         d.currency === "usd" && typeof d.payment_intent === "string",
         "dispute",
         "Dispute payment reference is missing.",
       );
-      ledger.reverse({ id: d.id, intent: d.payment_intent, cents: d.amount, kind: "dispute" });
+      ledger.dispute({ id: d.id, intent: d.payment_intent, cents: d.amount, status: d.status });
     }
     return { received: true };
   }
-  async function checkout(account) {
+  async function checkout(account, cents, idempotencyKey, { guest = false } = {}) {
+    if (cents !== undefined) {
+      requireThat(mode !== "demo" && stripe && origin && secret, "checkout_disabled", "Stripe checkout is not configured.", 503);
+      const order = ledger.checkoutOrder(account, cents, idempotencyKey);
+      if (order.url) return { url: order.url };
+      const volumePricing = order.price_version === 'volume-2026-09-19';
+      const session = await stripe.checkout.sessions.create({
+        mode: "payment",
+        integration_identifier: "s2t_credits_bqfrnxka",
+        branding_settings: { icon: { type: "url", url: "https://credits.s2t.app/stripe/thank-you.png" } },
+        client_reference_id: account,
+        metadata: { s2t_order: order.id },
+        line_items: [{ quantity: 1, price_data: { currency: "usd", unit_amount: cents, product_data: { name: "S2T credits", description: volumePricing ? `${order.grant_micros / 5000} credits for transcription and text cleanup. Each credit covers $0.005 of provider usage. One-time payment, no subscription.` : `${cents} credits for transcription and text cleanup. Each credit covers $${(order.funding_rate / 1000000).toFixed(3)} of provider usage.` } } }],
+        ...(volumePricing ? {custom_text: { submit: { message: `By paying you accept the [Terms](${origin}/policies/terms.html). [Withdrawal and refunds](${origin}/policies/refunds.html) and [Privacy](${origin}/policies/privacy.html). Using credits does not waive statutory withdrawal rights.` } }} : {}),
+        success_url: `${origin}/${guest ? "prepaid.html" : ""}?checkout=returned`,
+        cancel_url: `${origin}/${guest ? "prepaid.html" : ""}?checkout=cancelled`,
+      }, { idempotencyKey: `s2t-checkout-${order.id}` });
+      requireThat(typeof session.url === "string" && new URL(session.url).origin === "https://checkout.stripe.com", "checkout_url", "Stripe did not return a checkout URL.", 503);
+      ledger.attachCheckout(order.id, session.id, session.url);
+      return { url: session.url };
+    }
     requireThat(
       mode === "live" && stripe && paymentLinkId,
       "checkout_disabled",
@@ -138,14 +162,14 @@ export function createStripeBilling({
       503,
     );
     if (price.custom_unit_amount) {
-      integer(price.custom_unit_amount.minimum, 100, 10000, "Minimum top-up");
+      integer(price.custom_unit_amount.minimum, 500, 10000, "Minimum top-up");
       integer(
         price.custom_unit_amount.maximum,
         price.custom_unit_amount.minimum,
         10000,
         "Maximum top-up",
       );
-    } else integer(price.unit_amount, 100, 10000, "Top-up");
+    } else integer(price.unit_amount, 500, 10000, "Top-up");
     const url = new URL(link.url);
     url.searchParams.set("client_reference_id", account);
     return { url: url.href };

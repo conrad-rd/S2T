@@ -1,0 +1,28 @@
+title = "S2T secret scanning"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "generic-api-key"
+
+[[rules.allowlists]]
+description = "Environment variable access, not a literal credential"
+condition = "AND"
+paths = ['''(^|/)billing-local/cloudflare/worker\.mjs$''']
+regexTarget = "line"
+regexes = ['''^\s*this\.operatorKey = env\.S2T_OPERATOR_KEY;\s*$''']
+
+[[rules.allowlists]]
+description = "Two fixed idempotency identifiers in isolated gateway tests"
+condition = "AND"
+paths = ['''(^|/)billing-local/tests/gateway\.test\.mjs$''']
+regexTarget = "secret"
+regexes = ['''^(silent-recording-0001|unusable-speech-0001)$''']
+
+[[rules.allowlists]]
+description = "Historical Clerk publishable browser keys, not authentication secrets"
+condition = "AND"
+paths = ['''(^|/)billing-local/wrangler\.jsonc$''']
+regexTarget = "line"
+regexes = ['''^\s*"CLERK_PUBLISHABLE_KEY": "pk_(test|live)_[A-Za-z0-9+/=]+",?\s*$''']

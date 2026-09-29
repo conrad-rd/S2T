@@ -11,9 +11,9 @@ import S2TCore
         let notch = TopGlowLayout(display: display)
         let input = CGRect(x: 400, y: 400, width: 940 * 0.83254075, height: 300 * 0.83254075)
         let fixtures: [(ChromaAppearance.Geometry, CGSize, Double)] = [
-            (.bottom, CGSize(width: 1800, height: GlowProfile.extent), 12),
-            (.input(input, 115 * 0.83254075), CGSize(width: 1600, height: 1100), 18 * 0.83254075),
-            (.notch(notch), notch.frame.size, 12 * 240 / 411.25)
+            (.bottom, CGSize(width: 1800, height: GlowProfile.extent), ChromaAppearance.Geometry.bottom.maximumBlurRadius),
+            (.input(input, 115 * 0.83254075), CGSize(width: 1600, height: 1100), ChromaAppearance.Geometry.bottom.maximumBlurRadius),
+            (.notch(notch), notch.frame.size, ChromaAppearance.Geometry.bottom.maximumBlurRadius)
         ]
         for (geometry, size, radius) in fixtures {
             try autoreleasepool {
@@ -33,8 +33,10 @@ import S2TCore
             var profile = GlowProfile(energy: 1, heights: [3], sweepStrength: 1.3)
             switch geometry {
             case .bottom: break
+            case let .windowBottom(layout): profile.windowBottom = layout
             case let .notch(layout): profile.topLayout = layout
-            case let .input(rect, corner, cornerStyle): profile.inputOutline = InputOutlineBackdrop(rect: rect, cornerRadius: corner, cornerStyle: cornerStyle, strength: 1.3)
+            case let .withinInput(contour): profile.inputOutline = InputOutlineBackdrop(contour: contour, strength: 1.3, withinInput: true)
+            case let .input(contour): profile.inputOutline = InputOutlineBackdrop(contour: contour, strength: 1.3)
             }
             root.profile = profile
             let sampler = root.layer?.sublayers?.first
@@ -69,7 +71,7 @@ import S2TCore
             if ProcessInfo.processInfo.environment["S2T_GENERATED_GLOW_FIXTURE_DIR"] != nil {
                 let view: AnyView
                 switch geometry {
-                case .bottom:
+                case .bottom, .windowBottom:
                     view = AnyView(BottomGlow(level: 1, strength: 1.3, phase: .recording,
                         timeOverride: 0, reduceMotionOverride: true, reduceTransparencyOverride: true,
                         renderedProfile: profile))
@@ -77,14 +79,13 @@ import S2TCore
                     view = AnyView(TopGlow(renderedProfile: profile, showsBackdrop: false, layout: layout,
                         strength: 1.3, phase: .recording, levelProvider: { 1 }, timeOverride: 0,
                         reduceTransparencyOverride: true, reduceMotionOverride: true))
-                case let .input(rect, corner, cornerStyle):
+                case let .input(contour), let .withinInput(contour):
                     let state = AppState(preview: true)
+                    state.glowAppearance = geometry.appearance
                     state.phase = .recording
                     state.glowStrength = 1.3
                     let layout = InputOutlineLayout()
-                    layout.outlineRect = rect
-                    layout.cornerRadius = corner
-                    layout.cornerStyle = cornerStyle
+                    layout.contour = contour
                     view = AnyView(InputOutline(renderedProfile: profile, showsBackdrop: false, state: state,
                         layout: layout, reduceMotionOverride: true, timeOverride: 0, reduceTransparencyOverride: true))
                 }
@@ -104,8 +105,9 @@ import S2TCore
         let size = fixtures[0].1
         let position = (Double(x) + 0.5) / Double(bitmap.pixelsWide)
         let distance = size.height * (1 - (Double(y) + 0.5) / Double(bitmap.pixelsHigh))
-        let original = pow(max(0, 1 - distance / 265), 2.3) * pow(sin(.pi * position), 0.48)
-        let expected = 0.6 * sqrt(original)
+        let original = pow(max(0, 1 - distance / (265 * 0.4)), 2.3) * pow(sin(.pi * position), 0.48)
+        // The blur field is squared so it stays near the edge.
+        let expected = 0.6 * sqrt(original * original)
         guard abs((bitmap.colorAt(x: x, y: y)?.alphaComponent ?? -1) - expected) <= 1 / 255.0 else {
             throw failure("The Bottom native map differs from the softened approved distance field.")
         }

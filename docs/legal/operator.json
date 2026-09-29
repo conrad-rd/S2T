@@ -1,0 +1,14 @@
+{
+  "name": "Conrad Baulig",
+  "email": "info@conrad-baulig.com",
+  "address": "Boisseréestraße 1\n50674 Köln\nDeutschland",
+  "phone": "+4915123203112",
+  "publicIdentifiers": {
+    "vatId": null,
+    "wirtschaftsId": null,
+    "commercialRegister": null,
+    "confirmedAbsentByOperator": "2026-09-19"
+  },
+  "transactionalEmailService": null,
+  "updated": "2026-09-19"
+}

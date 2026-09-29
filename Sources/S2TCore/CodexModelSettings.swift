@@ -33,7 +33,7 @@ public struct CodexModel: Decodable, Equatable, Sendable {
         service_tiers?.contains(where: { ["fast", "priority"].contains($0.id) }) == true || additional_speed_tiers?.contains("fast") == true
     }
     public func normalized(_ options: CodexOptions) -> CodexOptions {
-        CodexOptions(reasoning: supported_reasoning_levels.contains(where: { $0.effort == options.reasoning }) ? options.reasoning : "", fast: supportsFast && options.fast)
+        options
     }
 }
 

@@ -102,6 +102,36 @@ final class InputOutlineTests: XCTestCase {
         XCTAssertEqual(GlowAppearance(rawValue: "aroundInput")?.title, "Around Input")
     }
 
+    func testWindowFallbackAcceptsLargeWindowsAndKeepsFullscreenEdgeVisible() throws {
+        let display = CGRect(x: 0, y: 0, width: 1440, height: 900)
+        let window = InputOutlineTarget(frame: CGRect(x: 50, y: 40, width: 1320, height: 820),
+            cornerRadius: 12, kind: .focusedWindow)
+        let converted = try XCTUnwrap(window.onScreens(primaryTop: 900, screens: [display]))
+        XCTAssertEqual(converted.kind, .focusedWindow)
+        XCTAssertEqual(converted.frame, CGRect(x: 50, y: 40, width: 1320, height: 820))
+        XCTAssertEqual(converted.cornerRadius, 12)
+        let fullscreen = InputOutlineTarget(frame: display, cornerRadius: 0, kind: .focusedWindow)
+        let visible = try XCTUnwrap(fullscreen.onScreens(primaryTop: 900, screens: [display]))
+        XCTAssertEqual(visible.frame, display.insetBy(dx: 3, dy: 3))
+        XCTAssertEqual(visible.cornerRadius, 0)
+        let geometry = InputOutlineGeometry(field: visible.frame, displayFrame: display, clipsToDisplay: true)
+        XCTAssertEqual(geometry.windowFrame, display)
+        XCTAssertEqual(geometry.outlineRect, display.insetBy(dx: 3, dy: 3))
+    }
+
+    func testWindowFallbackRejectsInvalidGeometryAndPreservesDisplayOffsets() throws {
+        let display = CGRect(x: -1920, y: 200, width: 1920, height: 1080)
+        let window = InputOutlineTarget(frame: CGRect(x: -1800, y: -150, width: 1600, height: 980),
+            cornerRadius: 12, kind: .focusedWindow)
+        XCTAssertEqual(window.onScreens(primaryTop: 982, screens: [display])?.frame,
+            CGRect(x: -1800, y: 152, width: 1600, height: 980))
+        for frame in [CGRect.zero, CGRect(x: 4000, y: 100, width: 1200, height: 800),
+                      CGRect(x: CGFloat.nan, y: 0, width: 1200, height: 800)] {
+            XCTAssertNil(InputOutlineTarget(frame: frame, cornerRadius: 12, kind: .focusedWindow)
+                .onScreens(primaryTop: 982, screens: [display]))
+        }
+    }
+
     func testFractionalFieldCoordinatesKeepTheExactBoundary() {
         let field = CGRect(x: 100.25, y: 200.75, width: 600.5, height: 80.25)
         let layout = InputOutlineGeometry(field: field)

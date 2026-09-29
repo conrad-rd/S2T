@@ -6,7 +6,7 @@ final class APIKeyTests: XCTestCase {
         let fixtures: [(APIAccount, String, String, String, String)] = [
             (.assemblyAI, "/v2/transcript", "api.assemblyai.com", "assembly-key", #"{"transcripts":[]}"#),
             (.openRouter, "/api/v1/key", "openrouter.ai", "Bearer router-key", #"{"data":{"label":"test"}}"#),
-            (.cerebras, "/v1/models", "api.cerebras.ai", "Bearer cerebras-key", #"{"data":[]}"#)
+            (.typeSafe, "/v1/models", "api.typesafe.ai", "Bearer typesafe-key", #"{"models":[]}"#)
         ]
         for (account, path, host, authorization, json) in fixtures {
             let transport = ScriptedTransport([.init(path: path, status: 200, json: json)])
@@ -41,7 +41,7 @@ final class APIKeyTests: XCTestCase {
             do {
                 let api = DictationAPI(transport: transport)
                 if path.hasSuffix("chat/completions") {
-                    _ = try await api.process(text: "hello", mode: .clean, model: "meta/muse-spark-1.3-contributor", apiKey: "fixture")
+                    _ = try await api.process(text: "hello", mode: .clean, model: "meta/muse-spark-1.3-contributor", apiKey: "fixture", routerOptions: OpenRouterOptions(allowDataCollection: true))
                 } else {
                     _ = try await api.transcribe(audio: Data(), apiKey: "fixture", provider: .openRouter)
                 }
@@ -58,9 +58,9 @@ final class APIKeyTests: XCTestCase {
 
     func testServerErrorsAreNotReportedAsBrokenProviderKeys() async {
         for status in [429, 500] {
-            let transport = ScriptedTransport([.init(path: "/v1/models", status: status, json: "{}")])
+            let transport = ScriptedTransport([.init(path: "/api/v1/key", status: status, json: "{}")])
             do {
-                try await DictationAPI(transport: transport).validateKey("test", account: .cerebras)
+                try await DictationAPI(transport: transport).validateKey("test", account: .openRouter)
                 XCTFail("Expected failure")
             } catch {
                 guard case .message = error as? ServiceError else { return XCTFail("Must not mark key rejected") }

@@ -40,65 +40,26 @@ final class SettingsHoverButton: NSButton {
     }
 }
 
-final class AppearancePhasePicker: SettingsCapsuleGroup {
-    private(set) var buttons: [SettingsHoverButton] = []
-    var onSelection: ((Int) -> Void)?
-
-    override init(frame: NSRect) {
-        super.init(frame: frame)
-        translatesAutoresizingMaskIntoConstraints = false
-        let content = NSView()
-        let stack = NSStackView()
-        stack.spacing = 6
-        stack.distribution = .fillEqually
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        content.addSubview(stack)
-        identifier = NSUserInterfaceItemIdentifier("appearance.previewPhase")
-        setAccessibilityLabel("Preview state")
-        for (index, symbol) in ["pause", "waveform", "ellipsis.circle"].enumerated() {
-            let title = ["Stiff", "Speaking", "Processing"][index]
-            let button = SettingsHoverButton(image: NSImage(systemSymbolName: symbol, accessibilityDescription: title)!, target: self, action: #selector(choose(_:)))
-            button.title = ""
-            button.imagePosition = .imageOnly
-            button.tag = index
-            button.bezelStyle = .accessoryBarAction
-            if #available(macOS 26, *) { button.borderShape = .capsule }
-            button.setButtonType(.pushOnPushOff)
-            button.imageScaling = .scaleProportionallyDown
-            button.symbolConfiguration = .init(pointSize: 15, weight: .medium)
-            button.toolTip = title
-            button.setAccessibilityLabel(title)
-            button.identifier = NSUserInterfaceItemIdentifier("appearance.phase.\(index)")
-            stack.addArrangedSubview(button)
-            button.widthAnchor.constraint(equalToConstant: 36).isActive = true
-            button.heightAnchor.constraint(equalToConstant: 36).isActive = true
-            buttons.append(button)
+final class AppearancePhasePicker: SettingsChoiceControl {
+    init(frame: NSRect) {
+        let items = zip(["Stiff", "Speaking", "Processing"], ["pause", "waveform", "ellipsis.circle"]).map {
+            SettingsChoiceItem(title: $0, image: NSImage(systemSymbolName: $1, accessibilityDescription: $0))
         }
-        content.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(content)
+        super.init(items: items, label: "Preview state")
+        self.frame = frame
+        translatesAutoresizingMaskIntoConstraints = false
+        identifier = NSUserInterfaceItemIdentifier("appearance.previewPhase")
         NSLayoutConstraint.activate([
-            widthAnchor.constraint(equalToConstant: 132), heightAnchor.constraint(equalToConstant: 48),
-            content.leadingAnchor.constraint(equalTo: leadingAnchor),
-            content.trailingAnchor.constraint(equalTo: trailingAnchor),
-            content.topAnchor.constraint(equalTo: topAnchor),
-            content.bottomAnchor.constraint(equalTo: bottomAnchor),
-            stack.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 6),
-            stack.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -6),
-            stack.topAnchor.constraint(equalTo: content.topAnchor, constant: 6),
-            stack.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -6)
+            widthAnchor.constraint(equalToConstant: 132), heightAnchor.constraint(equalToConstant: 48)
         ])
     }
     required init?(coder: NSCoder) { nil }
+
     func select(_ phase: Int, bezel: Bool) {
-        for button in buttons {
-            button.state = button.tag == phase ? .on : .off
-            button.isBordered = button.tag == phase
-            button.contentTintColor = button.tag == phase ? .controlAccentColor : .secondaryLabelColor
-        }
+        selectedSegment = phase
         let title = bezel ? "Done" : "Stiff"
-        buttons[0].image = NSImage(systemSymbolName: bezel ? "checkmark" : "pause", accessibilityDescription: title)
-        buttons[0].toolTip = title
-        buttons[0].setAccessibilityLabel(title)
+        if items[0].title != title {
+            items[0] = SettingsChoiceItem(title: title, image: NSImage(systemSymbolName: bezel ? "checkmark" : "pause", accessibilityDescription: title))
+        }
     }
-    @objc private func choose(_ sender: NSButton) { onSelection?(sender.tag) }
 }

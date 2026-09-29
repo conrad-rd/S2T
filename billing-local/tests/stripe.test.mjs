@@ -88,7 +88,7 @@ test("partial refunds deduplicate and out-of-order disputes freeze later purchas
   await send("refund.created", "re_1");
   await send("refund.updated", "re_1");
   assert.equal(ledger.summary(account).balance, 400);
-  refunds.dp_1 = { id: "dp_1", currency: "usd", payment_intent: "pi_late", amount: 500 };
+  refunds.dp_1 = { id: "dp_1", currency: "usd", payment_intent: "pi_late", amount: 500, status: "needs_response" };
   await send("charge.dispute.created", "dp_1");
   session.id = "cs_test_late";
   session.payment_intent.id = "pi_late";
@@ -125,7 +125,7 @@ test("checkout verifies the supplied link and allowed amount before sending a bu
   const price = {
     currency: "usd",
     type: "one_time",
-    custom_unit_amount: { minimum: 100, maximum: 10000 },
+    custom_unit_amount: { minimum: 500, maximum: 10000 },
   };
   const billing = createStripeBilling({
     mode: "live",

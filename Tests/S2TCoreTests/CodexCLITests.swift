@@ -23,13 +23,12 @@ final class CodexCLITests: XCTestCase {
         assert '--model' not in args
         assert 'OPENAI_API_KEY' not in os.environ
         assert args[-2:] == ['--', '-']
-        image = pathlib.Path(args[args.index('--image') + 1]).read_bytes()
-        assert image == bytes([1, 2, 3])
+        assert '--image' not in args
         output = pathlib.Path(args[args.index('--output-last-message') + 1])
         output.write_text(json.dumps({'input': sys.stdin.read(), 'directory': str(output.parent)}))
         """)
         let source = "Dictated text: $(touch NEVER) `whoami` \"quotes\"\n第二行"
-        let result = try await CodexCLI().complete(instructions: "Edit only.", prompt: source, model: "default", images: [Data([1, 2, 3])], executable: executable.path)
+        let result = try await CodexCLI().complete(instructions: "Edit only.", prompt: source, model: "default", executable: executable.path)
         let decoded = try JSONDecoder().decode([String: String].self, from: Data(result.utf8))
         XCTAssertEqual(decoded["input"], source)
         XCTAssertFalse(FileManager.default.fileExists(atPath: try XCTUnwrap(decoded["directory"])))
@@ -49,12 +48,12 @@ final class CodexCLITests: XCTestCase {
         XCTAssertEqual(result, "Configured result")
     }
 
-    func testCatalogCapabilitiesDoNotInventReasoningOrFastSupport() throws {
+    func testCatalogMetadataDoesNotDiscardExplicitOptions() throws {
         let data = Data(#"{"models":[{"slug":"fixture-model","display_name":"Fixture","supported_reasoning_levels":[{"effort":"low","description":"Quick"},{"effort":"high","description":"Deep"}],"service_tiers":[{"id":"priority","name":"Fast"}],"input_modalities":["text","image"]},{"slug":"plain","display_name":"Plain","supported_reasoning_levels":[],"input_modalities":["text"]}]}"#.utf8)
         let models = try CodexModelCatalog.decode(data)
         XCTAssertTrue(models[0].supportsFast)
-        XCTAssertEqual(models[0].normalized(CodexOptions(reasoning: "ultra", fast: true)), CodexOptions(fast: true))
-        XCTAssertEqual(models[1].normalized(CodexOptions(reasoning: "high", fast: true)), CodexOptions())
+        XCTAssertEqual(models[0].normalized(CodexOptions(reasoning: "ultra", fast: true)), CodexOptions(reasoning: "ultra", fast: true))
+        XCTAssertEqual(models[1].normalized(CodexOptions(reasoning: "high", fast: true)), CodexOptions(reasoning: "high", fast: true))
         XCTAssertFalse(CodexOptions(reasoning: "high\";bad").isValid)
         XCTAssertTrue(CodexOptions().arguments.isEmpty)
     }

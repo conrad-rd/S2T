@@ -20,6 +20,22 @@ __pycache__/
 *.db
 *.db-*
 *.log
+*.p8
+*.pfx
+*.keystore
+*.keychain
+*.keychain-db
+.dev.vars
+.dev.vars.*
+.wrangler/
+.vercel/
+.data/
+*.local.json
+*.local.jsonc
+
+# Private audit evidence and unrelated local media
+/.audit/
+/video-edits/
 
 # Separate website checkout and generated design references
 /website/

@@ -23,7 +23,7 @@ Baseline source copies and output are in build/prompt-timeline-baseline. The upd
 
 ## Checks
 
-All 182 domain/service tests passed. Timestamp tests cover twelve rapid references, corrected local recognition, missing words, long gaps, audio-origin offsets, stale frames, opt-in AssemblyAI timestamps, milliseconds-to-seconds conversion, ElevenLabs second timestamps, malformed timestamp entries and ordered batch image requests with separate model settings.
+All 182 domain/service tests passed. Timestamp tests cover twelve rapid references, corrected local recognition, missing words, long gaps, audio-origin offsets, stale frames, opt-in AssemblyAI timestamps, milliseconds-to-seconds conversion, local endpoint second timestamps, malformed timestamp entries and ordered batch image requests with separate model settings.
 
 The packaged prompt probe matched twelve distinct generated frames to references 250 milliseconds apart, including the final cue. It checked memory/count limits, history clearing, missing-frame warnings, PNG saving, cancellation and image-model account failure. Synthetic audio checks preserve recording samples and the final Speech buffer on finish. Pipeline fixtures check successful cleanup, original-text fallback and skipping attachments when text delivery fails.
 

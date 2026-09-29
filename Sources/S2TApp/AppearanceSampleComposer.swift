@@ -36,14 +36,17 @@ struct AppearanceSampleComposer: View {
 
 struct AppearanceSampleField: NSViewRepresentable {
     @Binding var text: String
+    var processing: InputProcessingBackdrop? = nil
     func makeCoordinator() -> Coordinator { Coordinator(text: $text) }
-    func makeNSView(context: Context) -> NSTextField {
-        let field = NSTextField()
+    func makeNSView(context: Context) -> AppearanceSampleTextField {
+        let field = AppearanceSampleTextField()
         field.identifier = NSUserInterfaceItemIdentifier("appearance.sample.input")
         field.placeholderString = "Ask ChatGPT"
         field.font = .systemFont(ofSize: 18)
         field.isBordered = false
         field.drawsBackground = false
+        field.appearance = NSAppearance(named: .darkAqua)
+        field.textColor = NSColor(white: 0.93, alpha: 1)
         field.focusRingType = .none
         field.lineBreakMode = .byClipping
         field.delegate = context.coordinator
@@ -51,8 +54,9 @@ struct AppearanceSampleField: NSViewRepresentable {
         field.setAccessibilityHelp("Type here to try the input glow. This text stays in the preview.")
         return field
     }
-    func updateNSView(_ field: NSTextField, context: Context) {
+    func updateNSView(_ field: AppearanceSampleTextField, context: Context) {
         context.coordinator.text = $text
+        field.processing = processing
         if field.stringValue != text { field.stringValue = text }
     }
     final class Coordinator: NSObject, NSTextFieldDelegate {
@@ -65,3 +69,27 @@ struct AppearanceSampleField: NSViewRepresentable {
     }
 }
 
+
+final class AppearanceSampleTextField: NSTextField {
+    var processing: InputProcessingBackdrop? { didSet { updateProcessing() } }
+    private let blurSource = ProgressiveBackdropView()
+
+    override func setFrameSize(_ size: NSSize) {
+        super.setFrameSize(size)
+        updateProcessing()
+    }
+
+    private func updateProcessing() {
+        guard let processing, bounds.width > 0, bounds.height > 0 else {
+            layer?.filters = nil
+            return
+        }
+        wantsLayer = true
+        layerUsesCoreImageFilters = false
+        blurSource.setFrameSize(bounds.size)
+        var profile = GlowProfile(energy: 1, heights: [])
+        profile.processingInput = processing
+        blurSource.profile = profile
+        layer?.filters = blurSource.layer?.sublayers?.first?.filters
+    }
+}

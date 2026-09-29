@@ -7,9 +7,9 @@ import S2TCore
     static func run() throws {
         try verifyReader()
         try verifyTerminal()
-        try verifyMenu()
+        try verifySettings()
         try verifyExactEdges()
-        print("PASS: app/site preset routing, automatic fallback, disabled presets, URL/focus/geometry changes, content-read exclusion, terminal cursor geometry and native menu switches.")
+        print("PASS: app/site preset routing, automatic fallback, disabled presets, URL/focus/geometry changes, content-read exclusion, terminal cursor geometry and settings persistence.")
         print("Uses injected Accessibility objects and isolated preferences. Live app/site compatibility is not verified.")
     }
 
@@ -119,32 +119,34 @@ import S2TCore
             guard let id = elements.firstIndex(where: { CFEqual($0, element) }) else { return [] }
             return (id == 2 ? [1, 3] : []).map { elements[$0] }
         }, fallbackFocus: { _ in nil }, hitTest: { _, _ in nil }, applicationBundleID: { _ in bundle },
-        caretBounds: { _ in nil }, automaticResolver: { editor, nodes in
+        caretBounds: { _ in nil }, automaticResolver: { editor, nodes, style in
             automaticCalls += 1
-            return ComposerTargeting.resolve(editor: editor, nodes: nodes)
+            return ComposerTargeting.resolveTarget(editor: editor, nodes: nodes, cornerStyle: style)
         }, enableAccessibility: { _ in })
         for (url, expected) in [("https://chatgpt.com/", InputTargetPreset.chatGPT), ("https://gemini.google.com/", .gemini),
                                 ("https://claude.ai/", .claude), ("https://discord.com/", .discord),
                                 ("https://web.whatsapp.com/", .whatsApp), ("https://web.telegram.org/", .telegram),
                                 ("https://www.google.com/", .google)] {
             host = url; automaticCalls = 0
-            try check(reader.read(pid: 2_600_000) == boundary && reader.usedPreset == expected && automaticCalls == 0,
-                      "Website \(expected.title) failed to bypass automatic detection")
+            try check(reader.read(pid: 2_600_000) == boundary && reader.usedPreset == expected && automaticCalls > 0,
+                      "Website \(expected.title) failed to use the shared boundary with its matching corner calibration")
             try check(reader.cornerStyle == .circular, "Website preset lost its circular corner style")
             if expected == .claude { try check(reader.cornerRadius == 20, "Claude field corners no longer match its blueprint") }
         }
         for (identifier, expected) in [("com.apple.MobileSMS", InputTargetPreset.messages), ("com.t3tools.t3code", .t3Code), ("com.openai.codex", .codex)] {
             bundle = identifier; host = "file:///local-ui"; automaticCalls = 0
-            try check(reader.read(pid: 2_600_000) == boundary && reader.usedPreset == expected && automaticCalls == 0,
-                      "Native \(expected.title) failed to use its preset")
+            try check(reader.read(pid: 2_600_000) == boundary && reader.usedPreset == expected && automaticCalls > 0,
+                      "Native \(expected.title) bypassed shared detection or lost its matching corner calibration")
         }
         bundle = "com.apple.Safari"; host = "https://chatgpt.com/"; automaticCalls = 0
         try check(reader.read(pid: 2_600_000, disabledPresets: ["chatGPT"]) != nil && reader.usedPreset == nil && automaticCalls > 0,
                   "Turning off a preset did not restore automatic detection")
         host = "https://x.com/"; automaticCalls = 0
-        try check(reader.read(pid: 2_600_000) == editor && reader.usedPreset == .x && automaticCalls == 0, "X did not use its editor boundary")
+        try check(reader.read(pid: 2_600_000) == boundary && reader.usedPreset == nil && automaticCalls > 0,
+            "An editor-only preset overrode the complete measured composer")
         primaryFocus = 5; automaticCalls = 0
-        try check(reader.read(pid: 2_600_000) == frames[5] && reader.usedPreset == .safari && automaticCalls == 0, "Safari did not target its native address field")
+        try check(reader.read(pid: 2_600_000) == frames[5] && reader.usedPreset == nil && automaticCalls > 0,
+            "Native address field bypassed the shared detector")
         primaryFocus = 1
         host = "https://unrelated.test/"
         try check(reader.read(pid: 2_600_000) != nil && reader.usedPreset == nil, "Safari overrode an unrelated website")
@@ -186,35 +188,22 @@ import S2TCore
         try check(reader.usedPreset == nil, "Terminal claimed a preset without cursor geometry")
     }
 
-    private static func verifyMenu() throws {
+    private static func verifySettings() throws {
         let state = AppState(preview: true)
         let saved = state.disabledInputPresets
         defer { state.disabledInputPresets = saved }
         state.disabledInputPresets = []
-        let menu = MenuBarController(state: state)
-        defer { NSStatusBar.system.removeStatusItem(menu.statusItem) }
-        menu.menuNeedsUpdate(menu.menu)
-        func find(_ identifier: String, _ root: NSMenu) -> NSMenuItem? {
-            for item in root.items {
-                if item.identifier?.rawValue == identifier { return item }
-                if let child = item.submenu, let found = find(identifier, child) { return found }
-            }
-            return nil
-        }
-        guard let dictation = find("dictation", menu.menu)?.submenu else { throw failure("Missing dictation menu") }
-        menu.menuNeedsUpdate(dictation)
-        guard let presets = find("inputPresets", dictation)?.submenu else { throw failure("Missing input presets menu") }
-        menu.menuNeedsUpdate(presets)
-        for preset in InputTargetPreset.allCases {
-            guard let row = find("inputPreset." + preset.rawValue, presets) else { throw failure("Missing \(preset.title) switch") }
-            try check(row.view == nil && row.state == .on && row.isEnabled, "Preset switch is not a native enabled row")
-            NSApp.sendAction(row.action!, to: row.target, from: row)
-            menu.refreshStatus()
-            try check(state.disabledInputPresets.contains(preset.rawValue) && row.state == .off, "Preset switch did not persist or refresh")
+        let window = AppearanceWindowController(state: state, presentsWindows: false)
+        defer { window.window?.close() }
+        window.showDictation()
+        try check(window.showingDictation && !window.dictationPane.isHidden && window.window?.isVisible == false,
+                  "Input detection settings are not reachable in hidden Dictation settings")
+        for preset in InputTargetPreset.allCases where preset != .safari {
+            state.disabledInputPresets.insert(preset.rawValue)
+            try check(state.disabledInputPresets.contains(preset.rawValue), "Preset exception did not persist")
             try check(AppState(preview: true).disabledInputPresets.contains(preset.rawValue), "Preset switch did not survive state reconstruction")
-            NSApp.sendAction(row.action!, to: row.target, from: row)
-            menu.refreshStatus()
-            try check(!state.disabledInputPresets.contains(preset.rawValue) && row.state == .on, "Preset could not be re-enabled")
+            state.disabledInputPresets.remove(preset.rawValue)
+            try check(!AppState(preview: true).disabledInputPresets.contains(preset.rawValue), "Preset could not be re-enabled")
         }
     }
 

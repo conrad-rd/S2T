@@ -115,8 +115,8 @@ struct ContentView: View {
         switch page {
         case .dictation: terms = "transcript record writing copy"
         case .settings: terms = "microphone input airpods bluetooth audio hold tap shortcut fn keyboard paste clipboard language accessibility"
-        case .connections: terms = "assemblyai openrouter cerebras credentials api key keychain"
-        case .models: terms = "model openrouter cerebras provider"
+        case .connections: terms = "assemblyai openrouter credentials api key keychain"
+        case .models: terms = "model openrouter provider"
         case .appearance: terms = "light glow intensity preview bottom indicator"
         }
         return search.trimmingCharacters(in: .whitespaces).isEmpty || (page.rawValue + " " + terms).localizedCaseInsensitiveContains(search.trimmingCharacters(in: .whitespaces))
@@ -148,9 +148,9 @@ struct ContentView: View {
 
     private var dictation: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Picker("Writing mode", selection: $state.mode) {
-                ForEach(WritingMode.allCases) { mode in Text(mode.title).tag(mode) }
-            }.pickerStyle(.segmented).labelsHidden()
+            SettingsChoiceBar(titles: WritingMode.allCases.map(\.title),
+                              selected: WritingMode.allCases.firstIndex(of: state.mode)!,
+                              label: "Writing mode") { state.mode = WritingMode.allCases[$0] }
                 .disabled(state.phase.busy || state.phase == .recording)
 
             Group {
@@ -194,9 +194,11 @@ struct ContentView: View {
                     .font(.system(size: 11)).foregroundStyle(.secondary).monospacedDigit()
             }
             HStack {
-                Text(state.mode == .verbatim ? "AssemblyAI" : "AssemblyAI → \(state.processingProvider?.title ?? "Choose a provider")")
-                Spacer()
-                if !state.modelUsed.isEmpty { Text(state.modelUsed).lineLimit(1).help(state.routeDescription) }
+                if state.isModelProviderVisible(for: "speech") && (state.mode == .verbatim || state.isModelProviderVisible(for: "text")) {
+                    Text(state.mode == .verbatim ? "AssemblyAI" : "AssemblyAI → \(state.processingProvider?.title ?? "Choose a provider")")
+                    Spacer()
+                    if !state.modelUsed.isEmpty { Text(state.modelUsed).lineLimit(1).help(state.routeDescription) }
+                }
             }.font(.system(size: 11)).foregroundStyle(.secondary)
         }.padding(.horizontal, 25).padding(.bottom, 23)
     }
@@ -233,6 +235,14 @@ struct ContentView: View {
 
     private var generalSettings: some View {
         SettingsPage {
+            SettingsCard("Providers") {
+                ForEach(AppState.optionalProviders, id: \.id) { provider in
+                    SettingsToggle("Show " + provider.title, isOn: Binding(
+                        get: { state.isProviderVisible(provider.id) },
+                        set: { state.setProviderVisible(provider.id, $0) }
+                    ))
+                }
+            }
             SettingsCard {
                 SettingsRow("Activation key") {
                     HStack(spacing: 7) {
@@ -251,6 +261,7 @@ struct ContentView: View {
                 }
                 SettingsToggle("Hold to talk", isOn: $state.holdEnabled).help("Release the key to finish.")
                 SettingsToggle("Tap to toggle", isOn: $state.tapEnabled).help("Tap once to start, again to finish.")
+                SettingsNote("Hold Escape for 0.6 seconds to cancel. A quick press stays available to the active app.")
                 if state.shortcutKey.keyCode == 63 {
                     SettingsRow("Fn emoji picker") { Text(state.shortcutAvailable ? "Overridden" : "Not active").foregroundStyle(.secondary) }
                 }
@@ -280,20 +291,14 @@ struct ContentView: View {
         SettingsPage {
             SettingsCard("Text processing") {
                 processingProviderRow
-                if let provider = state.processingProvider, provider.requiresAPIKey {
+                if let provider = state.processingProvider, state.isProviderVisible(provider.rawValue), provider.requiresAPIKey {
                     SettingsRow("API key") {
-                        if provider == .openRouter {
-                            SecureField("OpenRouter API key", text: $state.routerKey)
-                                .textFieldStyle(.roundedBorder).frame(maxWidth: 300)
-                                .accessibilityIdentifier("settings.routerKey")
-                        } else {
-                            SecureField("Cerebras API key", text: $state.cerebrasKey)
-                                .textFieldStyle(.roundedBorder).frame(maxWidth: 300)
-                                .accessibilityIdentifier("settings.cerebrasKey")
-                        }
+                        SecureField("\(provider.title) API key", text: provider == .xai ? $state.xaiKey : $state.routerKey)
+                            .textFieldStyle(.roundedBorder).frame(maxWidth: 300)
+                            .accessibilityIdentifier(provider == .xai ? "settings.xaiKey" : "settings.routerKey")
                     }
                     SettingsRow("macOS Keychain") {
-                        Link("Get an API key ↗", destination: URL(string: provider == .openRouter ? "https://openrouter.ai/settings/keys" : "https://cloud.cerebras.ai/platform/")!)
+                        Link("Get an API key ↗", destination: URL(string: provider == .xai ? "https://console.x.ai" : "https://openrouter.ai/settings/keys")!)
                         saveKeyButton(account: provider.rawValue, isEmpty: state.processingKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     }
                 }
@@ -332,7 +337,10 @@ struct ContentView: View {
     private var processingProviderRow: some View {
         SettingsRow("Provider") {
             Picker("Text processing provider", selection: $state.processingProvider) {
-                ForEach(ProcessingProvider.allCases) { provider in Text(provider.title).tag(Optional(provider)).accessibilityIdentifier("provider.\(provider.rawValue)") }
+                if let provider = state.processingProvider, !state.isProviderVisible(provider.rawValue) {
+                    Text("Current provider hidden").tag(Optional(provider)).disabled(true)
+                }
+                ForEach(ProcessingProvider.allCases.filter { state.isProviderVisible($0.rawValue) }) { provider in Text(provider.title).tag(Optional(provider)).accessibilityIdentifier("provider.\(provider.rawValue)") }
             }.pickerStyle(.menu).labelsHidden().frame(width: 220)
                 .disabled(state.phase.busy || state.phase == .recording)
                 .accessibilityIdentifier("settings.processingProvider")
@@ -346,14 +354,14 @@ struct ContentView: View {
     private var modelSettings: some View {
         SettingsPage {
             processingProviderSettings
-            if let provider = state.processingProvider {
+            if let provider = state.processingProvider, state.isProviderVisible(provider.rawValue) {
                 SettingsCard("Selected model") {
                     SettingsRow("Model ID") {
                         TextField(provider.defaultModel, text: $state.processingModel).textFieldStyle(.roundedBorder).frame(maxWidth: 300)
                     }
                     if provider == .openRouter {
                         SettingsRow("Endpoint") {
-                            TextField("cerebras/fp16", text: $state.routerEndpoint).textFieldStyle(.roundedBorder).frame(maxWidth: 300)
+                            TextField("Automatic", text: $state.routerEndpoint).textFieldStyle(.roundedBorder).frame(maxWidth: 300)
                         }
                     }
                     if provider.requiresAPIKey { SettingsRow("Model catalog") { Link("Browse models ↗", destination: provider.modelCatalogURL) } }

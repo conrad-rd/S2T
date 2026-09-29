@@ -1,21 +1,32 @@
+import {createOpenRouterCatalog} from "./openrouter-catalog.mjs";
+import { createWithdrawals } from './withdrawals.mjs';
+import { modelCatalog } from "./policy.mjs";
 import { createServer } from "node:http";
+import { requestDevice } from './usage.mjs';
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { randomUUID, randomBytes } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { configuration } from "./config.mjs";
+import { requireFreshFundingReview } from "./config-core.mjs";
 import { openLedger } from "./ledger.mjs";
 import { createGateway } from "./gateway.mjs";
 import { fixtureClient, providerClient } from "./providers.mjs";
 import { createStripeBilling } from "./stripe-billing.mjs";
+import { createDeviceLink } from "./device-link.mjs";
 import { createIdentity } from "./identity.mjs";
 import { Fault, requireThat } from "./money.mjs";
 export function createApplication(config, { execute, stripeClient } = {}) {
   mkdirSync(config.dataDir, { recursive: true, mode: 0o700 });
   const ledger = openLedger(config.dataDir + `/${config.mode}-ledger.sqlite`, {
     mode: config.mode,
+    enforceReconciliation: !!config.realProviders,
+    fundingReviewedAt: config.fundingReviewedAt ?? null,
   });
   ledger.claim();
   ledger.recover();
+  ledger.purgeExpired();
+  const retentionTimer = setInterval(() => ledger.purgeExpired(), 60000);
+  retentionTimer.unref();
   let encryptionKey = config.resultKey;
   if (!encryptionKey) {
     const path = config.dataDir + `/${config.mode}-result.key`;
@@ -27,13 +38,17 @@ export function createApplication(config, { execute, stripeClient } = {}) {
       writeFileSync(path, encryptionKey, { mode: 0o600, flag: "wx" });
     }
   }
+  const publicModels = createOpenRouterCatalog({policy:config.policy,enabled:config.realProviders});
   const gateway = createGateway({
+    resolvePolicy: body => publicModels.policyFor(body),
     ledger,
     policy: config.policy,
     execute:
-      execute || (config.mode === "live" ? providerClient({ keys: config.keys }) : fixtureClient()),
+      execute || (config.realProviders ? providerClient({ keys: config.keys }) : fixtureClient()),
     encryptionKey,
   });
+  const withdrawals = createWithdrawals({ledger,encryptionKey});
+  const devices = createDeviceLink({ ledger, mode: config.mode, encryptionKey, origin: config.origin });
   const identity = createIdentity(config.identity);
   const billing = createStripeBilling({
     ledger,
@@ -43,13 +58,22 @@ export function createApplication(config, { execute, stripeClient } = {}) {
     apiKey: config.stripeKey,
     stripeClient,
     paymentLinkURL: config.paymentLink,
+    origin: config.origin,
   });
   const publicRoot = fileURLToPath(new URL("./public/", import.meta.url));
   const files = {
+    ...Object.fromEntries(['privacy', 'terms', 'refunds', 'storage', 'legal', 'security'].map(slug => [`/policies/${slug}.html`, [`policies/${slug}.html`, 'text/html; charset=utf-8']])),
+    '/policies/policy.css': ['policies/policy.css', 'text/css'],
     "/": ["index.html", "text/html"],
     "/app.js": ["app.js", "text/javascript"],
+    '/credit-pricing.js': ['credit-pricing.js','text/javascript'],
+    '/withdraw.html': ['withdraw.html','text/html; charset=utf-8'],
+    '/withdraw.js': ['withdraw.js','text/javascript'],
+    '/withdraw.css': ['withdraw.css','text/css'],
     "/style.css": ["style.css", "text/css"],
     "/s2t.svg": ["s2t.svg", "image/svg+xml"],
+    "/fonts/bitcount-regular.ttf": ["fonts/bitcount-regular.ttf", "font/ttf"],
+    "/fonts/bitcount-OFL.txt": ["fonts/bitcount-OFL.txt", "text/plain; charset=utf-8"],
     ...Object.fromEntries(
       [400, 500, 600].map((weight) => [
         `/fonts/manrope-${weight}.ttf`,
@@ -86,7 +110,7 @@ export function createApplication(config, { execute, stripeClient } = {}) {
     );
   }
   async function account(req, res, { create = false } = {}) {
-    if (config.mode === "live") {
+    if (config.identity) {
       const token = req.headers.authorization?.replace(/^Bearer /, "");
       requireThat(
         token && identity,
@@ -94,11 +118,15 @@ export function createApplication(config, { execute, stripeClient } = {}) {
         "Sign in with the configured identity provider.",
         401,
       );
+      let subject;
       try {
-        return ledger.identity(await identity(token));
+        subject = await identity(token);
       } catch {
         throw new Fault("authentication", "Account authentication failed.", 401);
       }
+      const authenticated = ledger.identity(subject);
+      requireThat(!config.allowedAccounts || config.allowedAccounts.includes(authenticated.id), "staging_access", "This test service is restricted to approved testers.", 403);
+      return authenticated;
     }
     const token =
       req.headers.cookie
@@ -132,6 +160,7 @@ export function createApplication(config, { execute, stripeClient } = {}) {
     );
     const key = ledger.authenticate(raw.slice(7));
     requireThat(key, "authentication", "API key is invalid, expired, or revoked.", 401);
+    requireThat(!config.allowedAccounts || config.allowedAccounts.includes(key.account), "staging_access", "This test service is restricted to approved testers.", 403);
     return key;
   }
   const server = createServer(async (req, res) => {
@@ -140,7 +169,9 @@ export function createApplication(config, { execute, stripeClient } = {}) {
     res.setHeader("Referrer-Policy", "no-referrer");
     res.setHeader(
       "Content-Security-Policy",
-      "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      config.clerk
+        ? `default-src 'self'; script-src 'self' ${config.clerk.origin} https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; connect-src 'self' ${config.clerk.origin}; img-src 'self' https://img.clerk.com data:; frame-src ${config.clerk.origin} https://challenges.cloudflare.com; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'`
+        : "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
     );
     const json = (status, data) => {
       if (!res.destroyed) {
@@ -149,53 +180,62 @@ export function createApplication(config, { execute, stripeClient } = {}) {
       }
     };
     try {
+      if (req.method === "GET" && req.url === "/health") return json(200, { status: "ok" });
       const hosts = [
         new URL(config.origin).host,
         ...(config.mode === "live" ? [] : [`127.0.0.1:${config.port}`]),
       ];
       requireThat(hosts.includes(req.headers.host), "host", "Invalid host.", 403);
       const path = new URL(req.url, config.origin).pathname;
+      if (req.method === "GET" && path === "/api/config")
+        return json(200, { mode: config.mode, realProviders: !!config.realProviders, clerk: config.clerk || null });
       if (req.method === "GET" && Object.hasOwn(files, path)) {
         const [file, type] = files[path];
         res.writeHead(200, { "Content-Type": type });
         return res.end(readFileSync(publicRoot + file));
       }
+      const authenticatedKey = path.startsWith('/api/v1/') ? key(req) : null;
       requireThat(
         ledger.rate(`ip:${req.socket.remoteAddress}`, 300),
         "rate_limit",
         "Request limit reached.",
         429,
       );
+      if (req.method === "POST" && ["/api/device/start", "/api/device/poll"].includes(path)) {
+        requireThat(!req.headers.origin || req.headers.origin === config.origin, "origin", "Invalid request origin.", 403);
+        if (path.endsWith("/start")) {
+          requireThat(ledger.rate(`device-start:${req.socket.remoteAddress}`, 10), "rate_limit", "Too many connection attempts.", 429);
+          return json(200, devices.start());
+        }
+        const body = JSON.parse((await readBody(req, 4096)).toString());
+        requireThat(ledger.rate(`device-poll:${req.socket.remoteAddress}`, 90), "rate_limit", "Wait before checking the connection again.", 429);
+        return json(200, devices.poll(body.deviceCode));
+      }
       if (req.method === "POST" && path === "/api/stripe/webhook") {
         const raw = await readBody(req, 1000000);
         return json(200, await billing.webhook(raw, req.headers["stripe-signature"]));
       }
       if (path.startsWith("/api/v1/")) {
-        const authenticated = key(req);
+        const authenticated = authenticatedKey;
         requireThat(
-          ledger.rate(`key:${authenticated.id}`, 60),
+          ledger.rate(`key:${authenticated.id}`, 300),
           "rate_limit",
           "API key request limit reached.",
           429,
         );
         if (req.method === "GET" && path === "/api/v1/balance")
-          return json(200, ledger.summary(authenticated.account));
+          return json(200, { ...ledger.summary(authenticated.account), mode: config.mode, realProviders: !!config.realProviders, openRouterCatalog: config.realProviders, models: await publicModels.models(), keyLimit: ledger.keyLimits(authenticated.account, authenticated.id) });
         const match = /^\/api\/v1\/requests\/([a-f0-9-]{36})(\/cancel)?$/.exec(path);
         if (match && req.method === "GET" && !match[2])
           return json(200, gateway.get(authenticated.account, match[1]));
         if (match && req.method === "POST" && match[2])
           return json(200, gateway.cancel(authenticated.account, match[1]));
         if (req.method === "POST" && path === "/api/v1/requests") {
-          requireThat(
-            config.mode !== "live" || config.externalControlsExpire > Date.now(),
-            "controls_expired",
-            "Provider spending controls need operator review.",
-            503,
-          );
           const body = JSON.parse((await readBody(req, 12000000)).toString());
           const result = await gateway.run({
             account: authenticated.account,
             keyId: authenticated.id,
+            device: requestDevice(req.headers['x-s2t-device-id'], req.headers['x-s2t-device-name']),
             idempotencyKey: req.headers["idempotency-key"],
             body,
           });
@@ -203,13 +243,21 @@ export function createApplication(config, { execute, stripeClient } = {}) {
         }
         throw new Fault("not_found", "Endpoint not found.", 404);
       }
+      if (req.method === 'POST' && path === '/api/withdrawals') {
+        origin(req);
+        requireThat(ledger.rate('withdrawal:'+req.socket.remoteAddress,10),'rate_limit','Too many submissions. Please retry shortly or email the operator.',429);
+        return json(200,await withdrawals.submit(JSON.parse((await readBody(req,4096)).toString())));
+      }
       const a = await account(req, res, {
         create: req.method === "GET" && path === "/api/account",
       });
       if (req.method === "GET" && path === "/api/account")
         return json(200, {
           ...ledger.summary(a.id),
+          usage: ledger.usage(a.id, Number(new URL(req.url, config.origin).searchParams.get('days') ?? 30)),
           mode: config.mode,
+          realProviders: !!config.realProviders,
+          checkoutEnabled: config.mode !== "demo" && !!config.stripeKey && !!config.webhookSecret,
           paymentLink: config.paymentLink,
           checkoutReference: a.id,
           limits: ledger.limits,
@@ -220,6 +268,8 @@ export function createApplication(config, { execute, stripeClient } = {}) {
         if (path === "/api/demo/purchase") {
           requireThat(config.mode === "demo", "demo_disabled", "Demo top-ups are disabled.", 404);
           const reference = "demo_" + randomUUID();
+          const order = ledger.checkoutOrder(a.id, body.cents, reference);
+          ledger.attachCheckout(order.id, reference);
           ledger.grant({ account: a.id, cents: body.cents, session: reference, intent: reference });
           return json(200, ledger.summary(a.id));
         }
@@ -236,19 +286,23 @@ export function createApplication(config, { execute, stripeClient } = {}) {
           });
           return json(200, result);
         }
-        if (path === "/api/keys") return json(200, ledger.issueKey(a.id));
+        if (path === "/api/device/approve") return json(200, devices.approve(a.id, body.userCode));
+        if (path === "/api/keys") return json(200, ledger.issueKey(a.id, body));
+        if (path === "/api/keys/limits") { const { id, ...limits } = body; return json(200, ledger.setKeyLimits(a.id, id, limits)); }
         if (path === "/api/keys/revoke") {
           ledger.revoke(a.id, body.id);
           return json(200, { revoked: true });
         }
         if (path === "/api/checkout") {
+          requireFreshFundingReview(config);
+          requireThat(ledger.rate(`checkout:${a.id}`, 10), "rate_limit", "Too many checkout attempts. Wait a minute before retrying.", 429);
           requireThat(
-            config.mode === "live" && config.paymentLinkId,
+            config.mode !== "demo" && config.stripeKey && config.webhookSecret,
             "checkout_disabled",
             "Live checkout is not enabled.",
             503,
           );
-          return json(200, await billing.checkout(a.id));
+          return json(200, await billing.checkout(a.id, body.cents, req.headers["idempotency-key"]));
         }
       }
       throw new Fault("not_found", "Endpoint not found.", 404);
@@ -274,6 +328,7 @@ export function createApplication(config, { execute, stripeClient } = {}) {
     close: () =>
       new Promise((resolve) =>
         server.close(() => {
+          clearInterval(retentionTimer);
           ledger.unclaim();
           ledger.close();
           resolve();
@@ -284,9 +339,9 @@ export function createApplication(config, { execute, stripeClient } = {}) {
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const config = configuration();
   const app = createApplication(config);
-  app.server.listen(config.port, "127.0.0.1", () =>
+  app.server.listen(config.port, config.host, () =>
     console.log(
-      `S2T Credits: http://localhost:${config.port} (${config.mode}; ${config.mode === "live" ? "bounded provider access" : "no real provider spending"})`,
+      `S2T Credits: ${config.origin} (${config.mode}; ${config.realProviders ? "bounded provider access" : "no real provider spending"})`,
     ),
   );
   let closing = false;

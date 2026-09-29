@@ -1,0 +1,11 @@
+# Native settings background and divider
+
+The settings header previously combined two NSBox fills, two NSBox separators, and the native titlebar background. Their separate drawing contexts produced the offset lines and two-tone background beside the inset sidebar.
+
+`SettingsWindowSurface` puts one SwiftUI background and one unstyled `Divider` behind the split view. The titlebar is transparent, so the same background continues beneath the native title and toolbar. SwiftUI supplies the [background style](https://developer.apple.com/documentation/swiftui/shapestyle/background) and [divider appearance](https://developer.apple.com/documentation/swiftui/divider); there are no copied RGB values, separator heights, or custom line drawing. The divider host excludes safe-area regions because Auto Layout already positions it at the native content boundary.
+
+Settings pages use the same background style. Models also paints that background beneath its AppKit scroll content, keeping hidden Appearance layers out of the page composition. The sidebar keeps its native glass material, removes the extra translucent tint, and uses the system label color for unselected icons. Dashboard and Appearance retain their existing full-height backdrops.
+
+Verification uses the packaged settings toolbar, sidebar, Models, Dashboard and Appearance-selection checks, plus generated light/dark window renders. The relevant artifacts and task-start source snapshots are under `.audit/settings-native-chrome-2026-09-27/`.
+
+Universal build 912 passed build identity, toolbar navigation/resizing, sidebar and Models checks. Dashboard and all Appearance-selection transitions also passed with the shared surface. The final Models renders were inspected in both themes: header and body pixels match across the window, and the exposed divider sections use exactly the same pixel rows and colors. The Models layer no longer exposes hidden Appearance controls; unselected icons remain readable in light mode. Signing verification passed, and the old app was quit normally and relaunched from `build/S2T.app`. Live-window automation timed out after relaunch, so the visual evidence is from generated native window renders rather than a post-relaunch screenshot.

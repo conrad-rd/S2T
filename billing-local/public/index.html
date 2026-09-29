@@ -1,7 +1,48 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>S2T · Credits</title><link rel="stylesheet" href="/style.css"><script src="/app.js" defer></script></head>
-<body><header><a class="brand" href="/" aria-label="S2T"><img src="/s2t.svg" alt="S2T" width="64" height="42"></a><span class="badge">Local preview</span></header>
-<main><section class="intro"><h1>One balance. Every provider.</h1><p class="lead">Credits for transcription and text cleanup. Top up when you need to.</p></section>
-<div class="dashboard"><section class="purchase card"><div class="section-top"><h2>Add credits</h2><span>USD</span></div><label for="amount">Choose your amount</label><div class="amount-field"><span>$</span><input id="amount" type="number" min="1" max="100" step="0.01" value="5" inputmode="decimal" aria-describedby="amount-help"></div><div class="presets"><button data-amount="2">$2</button><button data-amount="5" aria-pressed="true">$5</button><button data-amount="10">$10</button><button data-amount="20">$20</button></div><p id="amount-help" class="muted">Any amount from $1 to $100.</p><div class="credit-equation"><span>You receive</span><strong><span id="preview-credits">500</span> <small>credits</small></strong></div><button id="purchase" class="primary">Try a $5 demo top-up <span>↗</span></button><p class="demo-note">Demo only. No payment is taken and these credits cannot buy API usage.</p><details><summary>Your Stripe payment link</summary><p>This opens the live checkout you supplied. Payments here will not fund this local demo.</p><a id="stripe-link" target="_blank" rel="noopener noreferrer">Open live Stripe checkout ↗</a></details></section>
-<aside><section class="wallet card"><div class="section-top"><h2>Your balance</h2><span class="pill">Demo wallet</span></div><p class="balance"><span id="balance">0</span><span>credits</span></p><p id="held-balance" class="muted">No credits reserved.</p><div class="providers"><span>AssemblyAI</span><span>ElevenLabs</span><span>OpenRouter</span></div><p class="muted">A shared balance across supported providers in the planned paid service.</p></section><section class="key-card card"><h2>Your S2T key</h2><p class="muted">Try issuing a key after your first demo top-up. Keys can run metered synthetic requests here. They do not spend real provider funds or work in the Mac app.</p><button id="create-key" class="secondary">Create demo key</button><div id="key-result" hidden><label for="key-value">Copy this key now. It is shown only once.</label><input id="key-value" readonly><button id="copy-key" class="secondary">Copy key</button></div><p id="key-count" class="muted"></p><div id="key-list"></div></section></aside></div>
-<section class="safety-panel card"><div class="section-top"><h2>Spending controls</h2><span id="service-state" class="pill">Checking</span></div><p class="muted">Each request reserves its maximum cost before it runs. Unused credits return to your available balance after completion.</p><div class="safety-limits"><span>Per request <strong>$0.25</strong></span><span>Daily service cap <strong>$5</strong></span><span>Total service cap <strong>$20</strong></span></div><button id="try-request" class="secondary">Try a metered demo request</button><p class="muted">Uses synthetic text, costs 0.01 demo credit, and makes no provider call.</p><p id="request-result" role="status"></p></section><section class="usage-section"><h2>Recent requests</h2><div id="requests"></div></section><section class="history"><h2>Recent top-ups</h2><div id="history"><p class="muted">Your first top-up will appear here.</p></div></section><section class="pricing-note"><h2>Simple, shared credits.</h2><p>$1 buys 100 credits. Each credit covers $0.009 of provider usage. The remaining 10% covers S2T’s service margin before fees. Actual usage varies by model and recording length.</p></section><p id="status" role="status" aria-live="polite"></p></main><footer><span>S2T</span><span>Local billing prototype · No live API access</span></footer></body></html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#000000"><title>Credits · S2T</title><link rel="stylesheet" href="/style.css"><script src="/app.js" type="module"></script><link rel="icon" type="image/svg+xml" href="https://s2t.app/favicon.svg" /></head>
+<body>
+<header><a class="brand" href="https://s2t.app/" aria-label="S2T home"><img src="/s2t.svg" alt="S2T" width="112" height="46"></a><span id="mode-badge" class="badge">Connecting</span><div id="user-button"></div></header>
+<main aria-label="S2T account">
+<p><a href="/withdraw.html">Withdraw a contract / Vertrag widerrufen</a></p>
+<p id="guest-entry" hidden><a class="primary compact" href="/prepaid.html">Buy prepaid key</a></p>
+<section id="sign-in" hidden></section>
+<div id="account-content" hidden>
+<section id="connect-panel" class="card" hidden><h2>Connect S2T on your Mac</h2><p class="muted">Check that this code matches the one in S2T.</p><p id="connect-code"></p><button id="connect-approve" class="primary compact">Connect this Mac</button><p id="connect-status" role="status"></p></section>
+<p id="account-warning" class="notice" role="status" hidden></p>
+<section class="overview" aria-label="Credit overview">
+<div class="wallet" role="group" aria-label="Available credits"><p class="balance"><span id="balance">—</span></p><button id="open-purchase" class="primary compact">Add credits</button><p id="held-balance" class="muted" hidden></p></div>
+<div class="last-activity"><h2>Last used</h2><p id="last-used">—</p><span id="last-used-detail" class="muted"></span></div>
+<div class="last-device"><h2>Last device</h2><p id="last-device">—</p><span id="device-detail" class="muted"></span></div>
+</section>
+<section class="usage-card" aria-labelledby="usage-title">
+<div class="usage-heading"><div><h2 id="usage-title">Usage</h2><p class="usage-total"><span id="usage-total">—</span> <span>credits used</span></p></div><div class="period-control" role="group" aria-label="Usage period"><button data-days="7" aria-pressed="false">7 days</button><button data-days="30" aria-pressed="true">30 days</button><button data-days="90" aria-pressed="false">90 days</button></div></div>
+<div class="chart-scale"><span>Daily usage</span><span>Credits</span></div>
+<div class="chart-wrap"><div id="chart-y-axis" class="chart-y-axis" aria-hidden="true"></div><div id="chart-detail" class="chart-detail" role="status" hidden></div><span id="chart-connector" class="chart-connector" hidden></span><div id="usage-chart" class="usage-chart" role="group" aria-label="Daily credits used, UTC"></div><p id="usage-empty" hidden>No usage in this period.</p></div>
+<div class="chart-axis" aria-hidden="true"><span id="chart-start"></span><span id="chart-end"></span></div>
+<div id="provider-usage" class="provider-usage"></div>
+</section>
+<div class="account-details">
+<details id="activity-details"><summary>Recent activity<span class="detail-hint" id="activity-count"></span></summary><div id="requests"></div></details>
+<details id="topup-details"><summary>Top-ups</summary><div id="history"></div></details>
+<details id="keys-details"><summary>App connections<span class="detail-hint" id="key-count"></span></summary><div class="detail-content"><p id="key-help" class="muted">Paste your key in S2T → Settings → API keys.</p><details class="new-key-options"><summary>New key limits and expiry</summary><div id="new-key-settings"></div></details><button id="create-key" class="secondary">Create S2T key</button><div id="key-result" hidden><label for="key-value">Copy this key now. It is shown only once.</label><input id="key-value" readonly><button id="copy-key" class="secondary">Copy key</button></div><div id="key-list"></div></div></details>
+<details><summary>Credit pricing</summary><p class="muted detail-content">$5 buys 500 credits · $10 buys 1,100 · $20 buys 2,300 · $50 buys 5,800 · $100 buys 11,800. Custom amounts between $5 and $100 use a gradual rate between these prices. Each credit covers $0<span class="decimal-places">.005</span> of provider usage. Prices include S2T’s service charge. Usage varies by model and recording length.</p></details>
+</div>
+<section id="demo-panel" class="card" hidden><div class="section-top"><h2>Demo</h2><span id="service-state" class="pill"></span></div><button id="try-request" class="secondary">Try a metered demo request</button><p class="muted">Synthetic text only. Uses 0<span class="decimal-places">.01</span> demo credit.</p><p id="request-result" role="status"></p></section>
+<dialog id="purchase-dialog" aria-labelledby="purchase-title">
+<div class="dialog-heading"><h2 id="purchase-title" tabindex="-1" autofocus>Add credits</h2><button id="close-purchase" class="dialog-close" aria-label="Close add credits">Close</button></div>
+<section class="purchase">
+<div class="credit-equation" aria-live="polite"><strong><span id="preview-credits">500</span> <small>credits</small></strong></div>
+<label for="amount">Amount in USD</label>
+<div class="purchase-choices"><div class="amount-field"><span aria-hidden="true">$</span><input id="amount" type="number" min="5" max="100" step="0.01" value="5" inputmode="decimal" aria-describedby="amount-help"></div>
+<div class="presets" role="group" aria-label="Purchase amount"><button data-amount="5" aria-pressed="true">$5</button><button data-amount="10">$10</button><button data-amount="20">$20</button><button data-amount="50">$50</button><button data-amount="100">$100</button></div></div>
+<p id="amount-help" class="muted">$5–$100 · One-time payment</p>
+<button id="purchase" class="primary">Add credits</button>
+<p id="purchase-note" class="muted"></p>
+<p class="purchase-policies muted"><a href="/policies/terms.html">Terms</a> · <a href="/policies/refunds.html">Refunds</a> · <a href="/policies/privacy.html">Privacy</a></p>
+<p id="purchase-status" role="status" class="notice" hidden></p>
+</section></dialog>
+</div>
+<p id="status" role="status" aria-live="polite"></p>
+</main><footer><span>S2T</span><nav aria-label="Policies"><a href="/policies/privacy.html">Privacy</a><a href="/policies/terms.html">Terms</a><a href="/policies/refunds.html">Refunds</a><a href="/policies/storage.html">Cookies and storage</a><a href="/policies/legal.html">Impressum</a><a href="/policies/security.html">Security</a></nav><span id="footer-mode" hidden></span></footer>
+</body></html>

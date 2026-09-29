@@ -37,7 +37,9 @@
 	<string>S2T</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Prompt mode uses on-device speech recognition during dictation to detect spoken visual references such as look here. S2T does not send this detection audio to Apple.</string>
+	<key>NSAudioCaptureUsageDescription</key>
+	<string>S2T records Mac audio only while you record a meeting with Mac audio enabled.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>S2T uses your microphone while you dictate. When you finish, your recording is sent to your selected speech-to-text provider using your own API key.</string>
+	<string>S2T uses your microphone while you record dictation or meetings. Audio is sent to your selected transcription provider. Meeting audio is saved on this Mac and sent to AssemblyAI in parts while you record.</string>
 </dict>
 </plist>

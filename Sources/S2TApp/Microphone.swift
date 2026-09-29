@@ -4,6 +4,18 @@ import Foundation
 import S2TCore
 
 final class Microphone: NSObject, @unchecked Sendable {
+    private let simulation: (audio: [Float], delay: TimeInterval)?
+
+    override init() {
+        simulation = nil
+        super.init()
+    }
+
+    init(simulatedAudio: [Float], startDelay: TimeInterval) {
+        simulation = (simulatedAudio, startDelay)
+        super.init()
+    }
+
     static let configurationChanged = Notification.Name("S2TMicrophoneConfigurationChanged")
     private let controlQueue = DispatchQueue(label: "com.s2t.microphone", qos: .userInitiated)
     private var unit: AudioUnit?
@@ -25,6 +37,8 @@ final class Microphone: NSObject, @unchecked Sendable {
     private var liveSpeech = false
     private var speechSamples: [Float] = []
     private var speechOverflow = false
+    private var streamingReadOffset: Int?
+    private var recordingFinalized = false
     private var framesReceived = 0
     private var firstAudioTime: Double?
     var audioStartTime: Double? {
@@ -47,19 +61,27 @@ final class Microphone: NSObject, @unchecked Sendable {
         return framesReceived
     }
 
-    func start(deviceUID: String = "", captureAudio: Bool = true, liveSpeech: Bool = false) async throws {
+    func start(deviceUID: String = "", captureAudio: Bool = true, liveSpeech: Bool = false, streamingAudio: Bool = false) async throws {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             controlQueue.async {
                 do {
-                    try self.startCapture(deviceUID: deviceUID, captureAudio: captureAudio, liveSpeech: liveSpeech)
+                    try self.startCapture(deviceUID: deviceUID, captureAudio: captureAudio, liveSpeech: liveSpeech, streamingAudio: streamingAudio)
                     continuation.resume()
                 } catch { continuation.resume(throwing: error) }
             }
         }
     }
 
-    private func startCapture(deviceUID: String, captureAudio: Bool, liveSpeech: Bool) throws {
+    private func startCapture(deviceUID: String, captureAudio: Bool, liveSpeech: Bool, streamingAudio: Bool) throws {
         stopCapture()
+        if let simulation {
+            Thread.sleep(forTimeInterval: simulation.delay)
+            resetCapture(rate: 48000, captureAudio: captureAudio, liveSpeech: liveSpeech, streamingAudio: streamingAudio)
+            simulation.audio.withUnsafeBufferPointer { buffer in
+                if let base = buffer.baseAddress { capture(base, count: buffer.count) }
+            }
+            return
+        }
         guard var device = AudioInputs.resolve(deviceUID) else {
             throw ServiceError.message(deviceUID.isEmpty
                 ? "No wired or built-in microphone is available. Connect one or choose a microphone in General settings."
@@ -106,23 +128,7 @@ final class Microphone: NSObject, @unchecked Sendable {
             }, inputProcRefCon: Unmanaged.passUnretained(self).toOpaque())
             try check(AudioUnitSetProperty(created, kAudioOutputUnitProperty_SetInputCallback, kAudioUnitScope_Global, 0,
                 &callback, UInt32(MemoryLayout<AURenderCallbackStruct>.size)))
-            lock.lock()
-            sampleRate = rate
-            samples = []
-            if captureAudio { samples.reserveCapacity(Int(rate) * 60) }
-            level = 0
-            envelope = AudioEnvelope()
-            spectrumAnalyzer = AudioSpectrum(sampleRate: rate)
-            frequencyLevels = Array(repeating: 0, count: AudioSpectrum.bandCount)
-            capturing = true
-            reportedRenderFailure = false
-            framesReceived = 0
-            firstAudioTime = nil
-            self.captureAudio = captureAudio
-            self.liveSpeech = liveSpeech
-            speechSamples = []
-            speechOverflow = false
-            lock.unlock()
+            resetCapture(rate: rate, captureAudio: captureAudio, liveSpeech: liveSpeech, streamingAudio: streamingAudio)
             try check(AudioUnitInitialize(created))
             observe(device)
             try check(AudioOutputUnitStart(created))
@@ -130,6 +136,28 @@ final class Microphone: NSObject, @unchecked Sendable {
             stopCapture()
             throw error
         }
+    }
+
+    private func resetCapture(rate: Double, captureAudio: Bool, liveSpeech: Bool, streamingAudio: Bool) {
+        lock.lock()
+        sampleRate = rate
+        samples = []
+        if captureAudio { samples.reserveCapacity(Int(rate) * 60) }
+        level = 0
+        envelope = AudioEnvelope()
+        spectrumAnalyzer = AudioSpectrum(sampleRate: rate)
+        frequencyLevels = Array(repeating: 0, count: AudioSpectrum.bandCount)
+        capturing = true
+        reportedRenderFailure = false
+        framesReceived = 0
+        firstAudioTime = nil
+        self.captureAudio = captureAudio
+        self.liveSpeech = liveSpeech
+        streamingReadOffset = streamingAudio ? 0 : nil
+        recordingFinalized = false
+        speechSamples = []
+        speechOverflow = false
+        lock.unlock()
     }
 
     private func render(flags: UnsafeMutablePointer<AudioUnitRenderActionFlags>, time: UnsafePointer<AudioTimeStamp>, frames: UInt32) -> OSStatus {
@@ -219,12 +247,50 @@ final class Microphone: NSObject, @unchecked Sendable {
         level = envelope.update(rms: rms, peak: Double(peak), duration: Double(count) / sampleRate)
     }
 
+    func drainMeetingAudio() -> (samples: [Int16], sampleRate: Int) {
+        lock.lock(); defer { lock.unlock() }
+        let result = (samples, Int(sampleRate))
+        samples.removeAll(keepingCapacity: true)
+        return result
+    }
+
     func drainSpeechAudio() -> (samples: [Float], sampleRate: Double, overflowed: Bool) {
         lock.lock(); defer { lock.unlock() }
         let result = (speechSamples, sampleRate, speechOverflow)
         speechSamples = []
         speechOverflow = false
         return result
+    }
+
+    var streamingSampleRate: Int {
+        lock.lock(); defer { lock.unlock() }
+        return Int(sampleRate)
+    }
+
+    func audioPrefix(frames: Int) -> Data {
+        lock.lock()
+        let captured = Array(samples.prefix(frames))
+        let rate = UInt32(sampleRate)
+        lock.unlock()
+        return WaveAudio.encode(samples: captured, sampleRate: rate)
+    }
+
+    func releaseStreamingAudio() {
+        lock.lock(); defer { lock.unlock() }
+        guard recordingFinalized else { return }
+        samples = []
+        streamingReadOffset = nil
+    }
+
+    func drainStreamingAudio() -> (samples: [Int16], sampleRate: Int, hasMore: Bool) {
+        lock.lock(); defer { lock.unlock() }
+        guard let offset = streamingReadOffset else { return ([], Int(sampleRate), false) }
+        let end = min(samples.count, offset + Int(sampleRate / 10))
+        let chunk = Array(samples[offset..<end])
+        let hasMore = end < samples.count
+        streamingReadOffset = end
+        if recordingFinalized && !hasMore { samples = []; streamingReadOffset = nil }
+        return (chunk, Int(sampleRate), hasMore)
     }
 
     func finish() async -> Data {
@@ -238,7 +304,8 @@ final class Microphone: NSObject, @unchecked Sendable {
         lock.lock()
         let captured = samples
         let rate = UInt32(sampleRate)
-        samples = []
+        recordingFinalized = true
+        if streamingReadOffset == nil { samples = [] }
         lock.unlock()
         return WaveAudio.encode(samples: captured, sampleRate: rate)
     }
@@ -267,6 +334,7 @@ final class Microphone: NSObject, @unchecked Sendable {
         lock.lock()
         capturing = false
         liveSpeech = false
+        if !preserveSpeech { streamingReadOffset = nil }
         if !preserveSpeech { speechSamples = []; speechOverflow = false }
         level = 0
         frequencyLevels = Array(repeating: 0, count: AudioSpectrum.bandCount)
@@ -289,6 +357,50 @@ final class Microphone: NSObject, @unchecked Sendable {
         renderBuffer?.deallocate()
         renderBuffer = nil
         capacity = 0
+    }
+
+    @MainActor static func verifyStreamingAudio() throws {
+        let microphone = Microphone()
+        microphone.capturing = true
+        microphone.liveSpeech = true
+        microphone.streamingReadOffset = microphone.samples.count
+        let signal: [Float] = [0, 0.5, -0.5, 1, -1]
+        signal.withUnsafeBufferPointer { microphone.capture($0.baseAddress!, count: $0.count) }
+        let speech = microphone.drainSpeechAudio()
+        let streamed = microphone.drainStreamingAudio()
+        guard speech.samples == signal, streamed.samples == [0, 16383, -16383, 32767, -32767],
+              microphone.samples == streamed.samples, microphone.drainStreamingAudio().samples.isEmpty else {
+            throw ServiceError.message("Streaming changed local recording or consumed prompt audio.")
+        }
+        let long = Array(repeating: Float(0), count: 48000 * 6)
+        long.withUnsafeBufferPointer { microphone.capture($0.baseAddress!, count: $0.count) }
+        var backlog: [Int16] = []
+        while true {
+            let chunk = microphone.drainStreamingAudio()
+            guard chunk.samples.count <= 48000 else {
+                throw ServiceError.message("Streaming chunks exceeded one second or lost buffered audio.")
+            }
+            backlog.append(contentsOf: chunk.samples)
+            if !chunk.hasMore { break }
+        }
+        guard backlog.count == long.count else {
+            throw ServiceError.message("Authorization backlog lost opening audio after five seconds.")
+        }
+        signal.withUnsafeBufferPointer { microphone.capture($0.baseAddress!, count: $0.count) }
+        microphone.stopCapture(preserveSpeech: true)
+        let finalChunk = microphone.drainStreamingAudio()
+        let audio = microphone.finishCapture()
+        guard audio.count == 44 + (signal.count * 2 + long.count) * 2,
+              finalChunk.samples == streamed.samples,
+              microphone.drainStreamingAudio().samples.isEmpty else {
+            throw ServiceError.message("Finishing did not preserve final streaming audio and full recording.")
+        }
+        microphone.capturing = true; microphone.streamingReadOffset = microphone.samples.count
+        signal.withUnsafeBufferPointer { microphone.capture($0.baseAddress!, count: $0.count) }
+        microphone.cancelCapture()
+        guard microphone.drainStreamingAudio().samples.isEmpty else {
+            throw ServiceError.message("Cancelled streaming audio remained buffered.")
+        }
     }
 
     @MainActor static func verifyPromptAudio() throws {

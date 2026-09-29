@@ -54,7 +54,12 @@ enum ContourMask {
                             exterior: Path, illumination: (Double) -> Double,
                             bounds: ClosedRange<CGFloat>) -> NSImage? {
         guard let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return nil }
+        let positions = (0...32).map { CGFloat($0) / 32 }
+        let coverage = positions.map { illumination($0) }
+        let solid = (coverage[0] == 0 || coverage[0] == 1) && coverage.allSatisfy { $0 == coverage[0] }
+        let band = solid ? contentBand(cgImage, size: size)?.applying(transform).insetBy(dx: -1, dy: -1).integral : nil
         return render(size: size) { context in
+            if let band { context.clip(to: band) }
             context.addPath(exterior.cgPath)
             context.clip(using: .evenOdd)
             context.saveGState()
@@ -65,13 +70,37 @@ enum ContourMask {
             context.draw(cgImage, in: CGRect(origin: .zero, size: size))
             context.restoreGState()
             context.setBlendMode(.destinationIn)
-            let positions = (0...32).map { CGFloat($0) / 32 }
-            let colors = positions.map { CGColor(gray: 1, alpha: illumination($0)) }
-            if let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceGray(), colors: colors as CFArray, locations: positions) {
+            if solid {
+                // Keep the second contour clip, including its antialiasing, without shading a constant gradient.
+                context.setFillColor(CGColor(gray: 1, alpha: coverage[0]))
+                context.fill(CGRect(origin: .zero, size: size))
+            } else if let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceGray(),
+                colors: coverage.map { CGColor(gray: 1, alpha: $0) } as CFArray, locations: positions) {
                 context.drawLinearGradient(gradient, start: CGPoint(x: bounds.lowerBound, y: 0),
                     end: CGPoint(x: bounds.upperBound, y: 0), options: [.drawsBeforeStartLocation, .drawsAfterEndLocation])
             }
 
         }
+    }
+
+    private static func contentBand(_ image: CGImage, size: CGSize) -> CGRect? {
+        let byteOrder = image.bitmapInfo.intersection(.byteOrderMask)
+        guard image.bitsPerComponent == 8, image.bitsPerPixel == 32,
+              image.alphaInfo == .premultipliedLast,
+              byteOrder.isEmpty || byteOrder == .byteOrder32Big,
+              let data = image.dataProvider?.data, let bytes = CFDataGetBytePtr(data) else { return nil }
+        func isClear(_ y: Int) -> Bool {
+            let row = bytes.advanced(by: y * image.bytesPerRow)
+            for x in 0..<image.width where row[x * 4 + 3] != 0 { return false }
+            return true
+        }
+        var first = 0, last = image.height
+        while first < last && isClear(first) { first += 1 }
+        while last > first && isClear(last - 1) { last -= 1 }
+        // Retain transparent samples around the band for high-quality image interpolation.
+        first = max(0, first - 4)
+        last = min(image.height, last + 4)
+        return CGRect(x: 0, y: Double(first) / Double(image.height) * size.height,
+            width: size.width, height: Double(last - first) / Double(image.height) * size.height)
     }
 }

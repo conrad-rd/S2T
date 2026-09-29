@@ -2,14 +2,22 @@ import CoreGraphics
 import Foundation
 
 public enum GlowAppearance: String, CaseIterable, Sendable {
-    case bottom, aroundNotch, aroundInput, bezel
+    case bottom, aroundNotch, aroundInput, bezel, withinInput, liquidGlass
+
+    public static let selectableCases: [Self] = [.bottom, .aroundNotch, .aroundInput, .withinInput, .liquidGlass]
+    public var selection: Self { self == .bezel ? .liquidGlass : self }
+    public var isClassic: Bool { selection == .liquidGlass }
+
+    public var followsInput: Bool { self == .aroundInput || self == .withinInput }
 
     public var title: String {
         switch self {
         case .bottom: return "Bottom"
         case .aroundNotch: return "Around Notch"
         case .aroundInput: return "Around Input"
-        case .bezel: return "Bezel"
+        case .bezel: return "Classic"
+        case .withinInput: return "Within Input"
+        case .liquidGlass: return "Classic"
         }
     }
 }
@@ -66,7 +74,7 @@ public struct TopGlowLayout: Equatable {
         guard let notch else { return point.y }
         let side = abs(point.x - notch.midX) - notch.width / 2
         let join = topJoinRadius
-        if side >= 0, side < join, point.y < join {
+        if side < join, point.y < join {
             return join - hypot(join - side, join - point.y)
         }
         let radius = cornerRadius

@@ -3,19 +3,29 @@ import S2TCore
 
 @MainActor enum PromptModeProbe {
     static func run() async throws {
+        if CommandLine.arguments.contains("--benchmark-delivery") { try await PromptCompletionProbe.run(); return }
+        if CommandLine.arguments.contains("--benchmark-pipeline") { try await PromptPipelineBenchmark.run(); return }
         if CommandLine.arguments.contains("--benchmark") { try await PromptPerformanceProbe.run(); return }
-        try await verifyShortcuts()
-        try await BrowserInsertionProbe.run()
-        try await verifyModelEditor()
-        try Microphone.verifyPromptAudio()
-        try await verifyTimeline()
         let defaults = UserDefaults(suiteName: "com.s2t.preview")!
         let saved = defaults.persistentDomain(forName: "com.s2t.preview") ?? [:]
         defer { defaults.setPersistentDomain(saved, forName: "com.s2t.preview") }
         defaults.setPersistentDomain([:], forName: "com.s2t.preview")
+        try await PromptDestinationProbe.run()
+        try await verifyShortcuts()
+        try await ShortcutEventTapProbe.run()
+        try await verifyManualCaptures()
+        try await PromptDeliveryProbe.run()
+        try await PromptCaptureFeedback.verify()
+        try PromptCaptureRenderingProbe.run()
+        try WithinInputExpansionProbe.verify()
+        try PromptRegionCapture.verify()
+        try await BrowserInsertionProbe.run()
+        try Microphone.verifyPromptAudio()
+        try await verifyTimeline()
+        try await PromptScreenRecorder.verifyNonblockingStop()
         let board = NSPasteboard(name: .init("com.s2t.prompt.fixture." + UUID().uuidString))
         let state = AppState(preview: true, outputPasteboard: board)
-        guard !state.promptModeEnabled, state.promptVisionModel == "google/gemini-2.5-flash" else { throw failure("Prompt mode defaults") }
+        guard !state.promptModeEnabled else { throw failure("Prompt mode defaults") }
         guard state.promptShortcutKey == .rightCommand, state.shortcutKey == .function else { throw failure("Separate default shortcuts") }
         state.saveShortcut(.function, prompt: true)
         guard state.promptShortcutKey == .rightCommand else { throw failure("Duplicate shortcut accepted") }
@@ -31,54 +41,19 @@ import S2TCore
         state.handleActivation(.cancel, prompt: true)
         guard state.phase == .recording, state.rawTranscript == "Preserve this dictation" else { throw failure("Prompt shortcut cancelled normal dictation") }
         state.cancel()
-        let controller = MenuBarController(state: state)
-        defer { NSStatusBar.system.removeStatusItem(controller.statusItem) }
+        let controller = MenuBarController(state: state, presentsAppearanceWindow: false)
+        defer { NSStatusBar.system.removeStatusItem(controller.statusItem); controller.appearanceWindow.window?.close() }
         controller.menuNeedsUpdate(controller.menu)
-        guard let root = controller.menu.items.first(where: { $0.identifier?.rawValue == "prompt" }),
-              root.title.contains("Experimental beta"), let menu = root.submenu else { throw failure("Experimental beta menu") }
-        controller.menuNeedsUpdate(menu)
-        guard let toggle = menu.items.first(where: { $0.identifier?.rawValue == "prompt.enabled" }) as? ActionMenuItem else { throw failure("Toggle missing") }
-        guard let activation = menu.items.first(where: { $0.identifier?.rawValue == "prompt.activation" })?.submenu else { throw failure("Prompt activation submenu") }
-        controller.menuNeedsUpdate(activation)
-        guard activation.items.contains(where: { $0.identifier?.rawValue == "prompt.shortcut.record" }),
-              let reset = activation.items.first(where: { $0.identifier?.rawValue == "prompt.shortcut.default" }) as? ActionMenuItem,
-              reset.state == .on else { throw failure("Prompt shortcut controls and default checkmark") }
-        state.saveShortcut(custom, prompt: true)
-        reset.invoke()
-        guard state.promptShortcutKey == .rightCommand, state.shortcutKey == .function else { throw failure("Prompt default reset changed normal shortcut") }
-        toggle.invoke()
-        controller.refreshStatus()
-        guard state.promptModeEnabled, toggle.state == .on, AppState(preview: true).promptModeEnabled else { throw failure("Toggle persistence") }
-        guard !menu.items.contains(where: { $0.identifier?.rawValue == "prompt.capture" }) else { throw failure("Window capture is still offered") }
-        state.phase = .recording
-        controller.refreshStatus()
-        guard !toggle.isEnabled else { throw failure("Mode changed mid-recording") }
-        state.phase = .idle
-        let model = state.processingModel, host = state.routerEndpoint
-        state.promptVisionModel = "fixture/vision"
-        guard state.processingModel == model, state.routerEndpoint == host else { throw failure("Vision changed cleanup settings") }
-
-        guard let visionMenu = menu.items.first(where: { $0.identifier?.rawValue == "prompt.model" })?.submenu else { throw failure("Missing image provider menu") }
-        for provider in [VisionProvider.local, .codex] {
-            controller.menuNeedsUpdate(visionMenu)
-            guard let select = visionMenu.items.first(where: { $0.identifier?.rawValue == "visionProvider." + provider.rawValue }) as? ActionMenuItem else { throw failure("Missing image provider choice") }
-            select.invoke()
-            controller.menuNeedsUpdate(visionMenu)
-            guard state.promptVisionProvider == provider,
-                  visionMenu.items.contains(where: { $0.identifier?.rawValue == "visionProvider." + provider.rawValue && $0.state == .on }),
-                  visionMenu.items.contains(where: { $0.view?.identifier?.rawValue == (provider == .local ? "local.vision.url" : "codex.executable") }) else { throw failure("Image provider settings did not follow selection") }
-            state.promptVisionModel = provider == .local ? "fixture-vision:local" : "fixture-codex"
-            state.localVisionURL = "http://localhost:1234/fixture-vision"
-            let restored = AppState(preview: true)
-            guard restored.promptVisionProvider == provider, restored.promptVisionModel == state.promptVisionModel,
-                  restored.localVisionURL == state.localVisionURL, state.processingModel == model, state.routerEndpoint == host else { throw failure("Image provider settings are not independent or persistent") }
+        controller.appearanceWindow.showDictation()
+        guard controller.appearanceWindow.showingDictation,
+              !controller.menu.items.contains(where: { $0.identifier?.rawValue == "prompt" }) else {
+            throw failure("Prompt mode must be in hidden Dictation settings")
         }
-        state.promptVisionProvider = .local
-        guard state.promptVisionModel == "fixture-vision:local" else { throw failure("Codex replaced the local image model") }
-        state.promptVisionProvider = .openRouter
-        guard state.promptVisionModel == "fixture/vision" else { throw failure("Image provider switch replaced OpenRouter model") }
-        print("Vision providers: local/Codex menu actions, checkmarks, settings, persistence and cleanup isolation: PASS")
-
+        state.saveShortcut(custom, prompt: true)
+        state.saveShortcut(.rightCommand, prompt: true)
+        guard state.promptShortcutKey == .rightCommand, state.shortcutKey == .function else { throw failure("Prompt default reset changed normal shortcut") }
+        state.promptModeEnabled = true
+        guard AppState(preview: true).promptModeEnabled else { throw failure("Prompt toggle was not retained") }
         let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 32, pixelsHigh: 24, bitsPerSample: 8,
             samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 128, bitsPerPixel: 32)!
         memset(bitmap.bitmapData!, 180, bitmap.bytesPerRow * bitmap.pixelsHigh)
@@ -91,36 +66,27 @@ import S2TCore
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("s2t-prompt-fixture-" + UUID().uuidString)
         let session = fixture()
         session.stopListening()
-        let result = try await session.describe(transcript: "Match this layout. Look here.", api: DictationAPI(transport: PromptProbeTransport(needsImage: true)), key: "fixture", model: "fixture/vision", directory: directory)
+        let result = try await session.saveReferences(transcript: "Match this layout. Look here.", directory: directory)
         guard result.images.count == 1, result.references.count == 1,
               try Data(contentsOf: result.images[0]) == png, result.images[0].lastPathComponent.hasPrefix(session.id) else { throw failure("Timestamp frame selection and named image association") }
-        let rendered = PromptReferenceText.append(to: "Match this layout.", session: session.id, references: result.references)
-        guard rendered.contains(result.images[0].lastPathComponent), rendered.contains("1.2s") else { throw failure("Prompt image reference") }
+        let source = PromptReferenceText(transcript: "Match this layout. Look here. Keep the footer.", session: session.id)
+        let rendered = source.resolve(source.text, references: result.references)
+        guard rendered == "Match this layout. Look here [attached screenshot: [1]]. Keep the footer." else { throw failure("Prompt image reference") }
         state.promptImages = result.images
         state.copyPromptImage(result.images[0])
         guard board.data(forType: .png) == png, board.data(forType: ClipboardMonitor.outputType) != nil else { throw failure("Isolated image clipboard") }
 
         let sufficient = fixture()
         let allImagesDirectory = directory.appendingPathComponent("all-references")
-        let described = try await sufficient.describe(transcript: "Rename this button. Look here.", api: DictationAPI(transport: PromptProbeTransport(needsImage: false)), key: "fixture", model: "fixture/vision", directory: allImagesDirectory)
+        let described = try await sufficient.saveReferences(transcript: "Rename this button. Look here.", directory: allImagesDirectory)
         guard described.images.count == 1, described.references.count == 1,
               try Data(contentsOf: described.images[0]) == png,
-              described.references[0].imageName == described.images[0].lastPathComponent else { throw failure("A successful description must still preserve its screenshot") }
+              described.references[0].imageName == described.images[0].lastPathComponent else { throw failure("Saving references must preserve each screenshot") }
         try await verifyImagePasting(images: result.images + described.images, png: png)
-
-        let broken = fixture()
-        var accountFailure = false
-        let fallback = try await broken.describe(transcript: "Fix this. Look here.", api: DictationAPI(transport: PromptProbeTransport(needsImage: false, status: 401)), key: "fixture", model: "fixture/vision", directory: directory, onVisionError: { error in
-            if case .account(.openRouter, _) = error as? ServiceError { accountFailure = true; return true }
-            return false
-        })
-        guard accountFailure, fallback.images.count == 1, fallback.warnings.isEmpty,
-              fallback.references[0].description == "See screenshot for 'look here'." else { throw failure("Vision failure lost the image or account routing") }
 
         let cancelled = fixture()
         let cancelledDirectory = directory.appendingPathComponent("cancelled")
-        let pending = Task { try await cancelled.describe(transcript: "Look here", api: DictationAPI(transport: PromptProbeTransport(needsImage: true, delay: 200_000_000)), key: "fixture", model: "fixture/vision", directory: cancelledDirectory) }
-        try await Task.sleep(nanoseconds: 20_000_000)
+        let pending = Task { try await cancelled.saveReferences(transcript: "Look here", directory: cancelledDirectory) }
         cancelled.cancel()
         pending.cancel()
         do { _ = try await pending.value; throw failure("Cancelled processing completed") }
@@ -132,18 +98,15 @@ import S2TCore
             var delivered = ""
             var attachmentCalls = 0
             let pipelineBoard = NSPasteboard(name: .init("com.s2t.prompt.pipeline." + UUID().uuidString))
-            let pipeline = AppState(preview: true, api: DictationAPI(transport: PromptProbeTransport(needsImage: false, cleanupFails: cleanupFails), codex: ProviderProbeCodex(fails: cleanupFails)), outputPasteboard: pipelineBoard, promptSession: pipelineSession, insertPromptImages: { images, _, board in
-                guard delivered.contains("reference-1.png"), images.count == 1,
-                      board.string(forType: .string) == nil else { throw failure("Images pasted before text delivery or clipboard finalized too soon") }
+            let pipeline = AppState(preview: true, api: DictationAPI(transport: PromptProbeTransport(cleanupFails: cleanupFails), codex: PromptProbeCodex(fails: cleanupFails)), outputPasteboard: pipelineBoard, promptSession: pipelineSession, insertPromptImages: { images, _, board, beforeText in
+                guard !beforeText, !delivered.isEmpty, images.count == 1 else { throw failure("Screenshots were not attached after the complete prompt text") }
                 attachmentCalls += 1
-                return .init(sentCount: images.count, issue: nil, clipboardChange: board.changeCount)
+                return .init(sentCount: images.count, issue: nil, clipboardChange: board.changeCount, confirmation: .confirmed)
             }, insertText: { text, _ in
                 delivered = text
                 return deliveryOutcome
             })
             pipeline.processingProvider = provider
-            pipeline.promptVisionProvider = provider == .codex ? .codex : provider == .local ? .local : .openRouter
-            pipeline.promptVisionModel = pipeline.promptVisionProvider.defaultModel
             pipeline.assemblyKey = "fixture"
             pipeline.routerKey = provider == .openRouter ? "fixture" : ""
             pipeline.mode = .clean
@@ -152,15 +115,18 @@ import S2TCore
                 if pipeline.phase == .complete || pipeline.phase == .failed { break }
                 try await Task.sleep(nanoseconds: 10_000_000)
             }
-            guard pipeline.phase == .complete, delivered.contains("Prompt set " + pipelineSession.id),
-                  delivered.contains("reference-1.png"), pipeline.promptImages.count == 1,
+            guard pipeline.phase == .complete, delivered == "Please fix this button, look here [attached screenshot: [1]]. Keep the footer.",
+                  pipeline.promptImages.count == 1,
+                  pipeline.promptImages.first?.lastPathComponent == pipelineSession.id + "-reference-1.png",
                   attachmentCalls == (deliveryOutcome == .textSent ? 1 : 0),
                   pipelineBoard.string(forType: .string) == (deliveryOutcome == .textSent ? delivered : nil),
-                  (pipeline.processingFailureModel != nil) == cleanupFails else { throw failure("End-to-end prompt delivery or cleanup fallback") }
+                  (pipeline.processingFailureModel != nil) == cleanupFails else {
+                throw failure("End-to-end prompt delivery: provider=\(provider), expectedFailure=\(cleanupFails), outcome=\(deliveryOutcome), phase=\(pipeline.phase), images=\(pipeline.promptImages.count), attempts=\(attachmentCalls), text=\(delivered.count), clipboard=\(pipelineBoard.string(forType: .string)?.count ?? -1), cleanupFailure=\(pipeline.processingFailureModel ?? "none"), error=\(pipeline.errorMessage ?? "none")")
+            }
             guard pipeline.promptImages[0].path.hasPrefix(FileManager.default.temporaryDirectory.path) else { throw failure("Preview wrote real prompt storage") }
             pipeline.cancel()
         }
-        print("Prompt mode: beta menu, persistence, model isolation, generated frames, timestamp selection, stop/cancel, every reference saved, account fallback, named references, isolated image copy and complete delivery with cleanup success/failure PASS.")
+        print("Prompt mode: Settings navigation, persistence, model isolation, generated frames, timestamp selection, stop/cancel, saved references, account fallback, isolated image copy and delivery with cleanup success/failure PASS.")
         print("No screen capture, microphone, Speech recognition, real clipboard, Keychain, provider requests, or visible menus used. Live screen recording, provider latency and browser attachment acceptance are unverified.")
     }
 
@@ -181,12 +147,13 @@ import S2TCore
         history.clear()
         guard history.take().isEmpty else { throw failure("Cancelled history retained images") }
         var limited = PromptFrameHistory(maximumFrames: 10, maximumBytes: frames[0].image.count)
-        guard limited.append(frames[0]), !limited.append(frames[0]), limited.take().count == 1 else { throw failure("Frame memory limit") }
+        guard limited.append(frames[0]), limited.append(frames[0]), !limited.append(frames[1]),
+              limited.take().count == 2 else { throw failure("Idle image reuse must not spend the frame-memory budget twice") }
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("s2t-timeline-" + UUID().uuidString)
         let transcript = Array(repeating: "here", count: 12).joined(separator: ", ")
         let session = PromptModeSession(frames: frames, words: words, audioOrigin: 500)
         session.stopListening()
-        let result = try await session.describe(transcript: transcript, api: DictationAPI(transport: PromptProbeTransport(needsImage: true)), key: "fixture", model: "fixture/vision", directory: directory)
+        let result = try await session.saveReferences(transcript: transcript, directory: directory)
         guard result.references.count == 12, result.images.count == 12, result.warnings.isEmpty,
               result.references.map(\.seconds) == words.map(\.start),
               Set(try result.images.map { try Data(contentsOf: $0) }).count == 12 else { throw failure("Rapid references lost frames or used the wrong audio origin") }
@@ -196,8 +163,7 @@ import S2TCore
         let wholeDisplayFrames = try PromptScreenRecorder.verifyWholeDisplay()
         let wholeDisplay = PromptModeSession(frames: wholeDisplayFrames,
             words: [.init(text: "here", start: 0, end: 0.1), .init(text: "here", start: 1, end: 1.1)], audioOrigin: 600)
-        let wholeDisplayResult = try await wholeDisplay.describe(transcript: "here here", api: DictationAPI(transport: PromptProbeTransport(needsImage: true)),
-            key: "fixture", model: "fixture/vision", directory: directory)
+        let wholeDisplayResult = try await wholeDisplay.saveReferences(transcript: "here here", directory: directory)
         guard wholeDisplayResult.images.count == 2 else { throw failure("Full-display references were lost") }
         for index in wholeDisplayFrames.indices {
             guard try Data(contentsOf: wholeDisplayResult.images[index]) == wholeDisplayFrames[index].screenshot().png else {
@@ -209,8 +175,7 @@ import S2TCore
         let switched = PromptModeSession(frames: capturedFrames,
             words: [.init(text: "here", start: 0, end: 0.15)], audioOrigin: 500)
         switched.stopListening()
-        let original = try await switched.describe(transcript: "here", api: DictationAPI(transport: PromptProbeTransport(needsImage: true)),
-            key: "fixture", model: "fixture/vision", directory: directory)
+        let original = try await switched.saveReferences(transcript: "here", directory: directory)
         guard original.images.count == 1,
               try Data(contentsOf: original.images[0]) == capturedFrames[0].screenshot().png,
               try Data(contentsOf: original.images[0]) != capturedFrames[1].screenshot().png else {
@@ -223,7 +188,7 @@ import S2TCore
         print("Temporary full-screen recording released after extraction and cancellation; no recording file is created.")
         print("Recorder: reused synthetic pixel buffer, original capture times, app-to-browser switch, idle, stop and saved reference bytes PASS.")
         let missing = PromptModeSession(frames: frames, words: [.init(text: "here", start: 20, end: 20.1)], audioOrigin: 500)
-        let absent = try await missing.describe(transcript: "here", api: DictationAPI(transport: PromptProbeTransport(needsImage: true)), key: "fixture", model: "fixture/vision", directory: directory)
+        let absent = try await missing.saveReferences(transcript: "here", directory: directory)
         guard absent.images.isEmpty, absent.warnings.contains(where: { $0.contains("1 visual references") }) else { throw failure("Missing recording silently reused a stale frame") }
         print("Timeline: twelve references 250 ms apart retain all twelve distinct generated frames, including the final cue; audio offset, ordering and missing-frame warnings PASS.")
     }
@@ -241,19 +206,19 @@ import S2TCore
             return true
         }
         let complete = try await PromptImageInsertion.insert(images, recipient: recipient, board: board,
-            currentRecipient: { recipient }, canPost: { true }, postPaste: paste, waitForPaste: {})
+            observe: { _, _ in nil }, currentRecipient: { recipient }, canPost: { true }, postPaste: paste, waitForPaste: {})
         guard complete.sentCount == 2, complete.issue == nil, pasteCalls == 1, pasted == images.map(\.absoluteString),
               complete.clipboardChange == board.changeCount else { throw failure("Ordered automatic image paste with exact files") }
 
         pasted = []
         let focused: pid_t = 654321
         let interrupted = try await PromptImageInsertion.insert(images, recipient: recipient, board: board,
-            currentRecipient: { focused }, canPost: { true }, postPaste: paste, waitForPaste: {})
+            observe: { _, _ in nil }, currentRecipient: { focused }, canPost: { true }, postPaste: paste, waitForPaste: {})
         guard interrupted.sentCount == 0, interrupted.issue != nil, pasted.isEmpty else { throw failure("Image paste crossed a focus change") }
 
         pasted = []
         let changedClipboard = try await PromptImageInsertion.insert(images, recipient: recipient, board: board,
-            currentRecipient: { recipient }, canPost: { true }, postPaste: paste, waitForPaste: {
+            observe: { _, _ in nil }, currentRecipient: { recipient }, canPost: { true }, postPaste: paste, waitForPaste: {
                 board.clearContents(); board.setString("new user copy", forType: .string)
             })
         guard changedClipboard.sentCount == 2,
@@ -261,11 +226,11 @@ import S2TCore
               changedClipboard.clipboardChange != board.changeCount else { throw failure("Image paste overwrote a new clipboard copy") }
 
         let single = try await PromptImageInsertion.insert([images[0]], recipient: recipient, board: board,
-            currentRecipient: { recipient }, canPost: { true }, postPaste: paste, waitForPaste: {})
+            observe: { _, _ in nil }, currentRecipient: { recipient }, canPost: { true }, postPaste: paste, waitForPaste: {})
         guard single.sentCount == 1, board.data(forType: .png) == png else { throw failure("Single-image PNG fallback") }
         let unchanged = board.changeCount
         let missing = try await PromptImageInsertion.insert(images + [images[0].appendingPathExtension("missing")], recipient: recipient, board: board,
-            currentRecipient: { recipient }, canPost: { true }, postPaste: paste, waitForPaste: {})
+            observe: { _, _ in nil }, currentRecipient: { recipient }, canPost: { true }, postPaste: paste, waitForPaste: {})
         guard missing.sentCount == 0, missing.issue != nil, board.changeCount == unchanged else { throw failure("Unreadable batch partially changed clipboard") }
         let before = board.changeCount
         pasted = []
@@ -279,7 +244,7 @@ import S2TCore
         var pending: Task<PromptImageInsertion.Result, Error>!
         pending = Task { @MainActor in
             try await PromptImageInsertion.insert(images, recipient: recipient, board: board,
-                currentRecipient: { recipient }, canPost: { true }, postPaste: paste,
+                observe: { _, _ in nil }, currentRecipient: { recipient }, canPost: { true }, postPaste: paste,
                 waitForPaste: { pending.cancel(); try Task.checkCancellation() })
         }
         do { _ = try await pending.value; throw failure("Cancelled image paste completed") }
@@ -288,32 +253,128 @@ import S2TCore
         print("Automatic image paste: single batch with PNG bytes for every image and ordered file references, output markers, focus changes, clipboard changes, menu/permission guards and cancellation PASS using an isolated clipboard and injected events.")
     }
 
-    private static func verifyModelEditor() async throws {
-        var saved = "vendor/vision"
-        let editor = MenuValueEditor(title: "Image model", value: "openai/gpt-oss-120b", secure: false, onPaste: { _ in }) { value in
-            saved = value
-            return nil
+    private static func verifyManualCaptures() async throws {
+        let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 32, pixelsHigh: 24, bitsPerSample: 8,
+            samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 128, bitsPerPixel: 32)!
+        memset(bitmap.bitmapData!, 200, bitmap.bytesPerRow * bitmap.pixelsHigh)
+        let sourcePNG = bitmap.representation(using: .png, properties: [:])!
+        let frame = PromptScreenRecorder.Frame(time: 101.2, pointer: CGPoint(x: 5, y: 6), region: CGRect(x: 0, y: 0, width: 32, height: 24), image: sourcePNG)
+        let session = PromptModeSession(frames: [frame], words: [.init(text: "here", start: 1.2, end: 1.4)], audioOrigin: 100)
+        var shown = 0
+        session.onManualCapture = { _, previewed in if !previewed { shown += 1 } }
+        session.addManualCapture(try frame.screenshot().cropped(to: CGRect(x: 0, y: 0, width: 16, height: 12)))
+        session.addManualCapture(try frame.screenshot().cropped(to: CGRect(x: 4, y: 4, width: 20, height: 14)))
+        guard shown == 2, session.manualCaptures.count == 2 else { throw failure("Manual captures were not retained") }
+        session.stopListening()
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("s2t-prompt-manual-" + UUID().uuidString)
+        let result = try await session.saveReferences(transcript: "Look here.", directory: directory)
+        guard result.images.count == 3, result.references.count == 3,
+              result.references.map(\.number) == [1, 2, 3],
+              result.references.allSatisfy({ !$0.description.isEmpty }) else {
+            throw failure("Manual selections must ride along after spoken references")
         }
-        editor.validateValue = { value in
-            try? await Task.sleep(nanoseconds: 10_000_000)
-            return value == "openai/gpt-oss-120b" ? "This model cannot describe screenshots." : nil
+        let source = PromptReferenceText(transcript: "Look here. Fix this.", session: session.id)
+        let rendered = source.resolve(source.text, references: result.references)
+        guard rendered == "Look here [attached screenshot: [1]]. Fix this." else {
+            throw failure("Spoken mentions must stay inline without appending unspoken manual selections")
         }
-        editor.saveValue(nil)
-        guard editor.saveButton.title == "Checking…", !editor.saveButton.isEnabled else { throw failure("Model save did not await image validation") }
-        try await Task.sleep(nanoseconds: 30_000_000)
-        guard saved == "vendor/vision", editor.feedback.stringValue.contains("cannot describe"), editor.saveButton.title == "Save" else { throw failure("Text-only model was saved") }
-        editor.field.stringValue = "vendor/other-vision"
-        editor.saveValue(nil)
-        try await Task.sleep(nanoseconds: 30_000_000)
-        guard saved == "vendor/other-vision", editor.saveButton.title == "✓ Saved" else { throw failure("Valid image model was not saved") }
-        editor.saveButton.isEnabled = true
-        editor.field.stringValue = "vendor/stale"
-        editor.saveValue(nil)
-        editor.field.stringValue = "vendor/new-edit"
-        try await Task.sleep(nanoseconds: 30_000_000)
-        guard saved == "vendor/other-vision" else { throw failure("Stale image validation saved an edited value") }
-        print("Image model editor: asynchronous validation, text-only rejection, valid save and stale-edit protection PASS without a real provider or clipboard.")
+        let manualSizes = [(16, 12), (20, 14)]
+        for (capture, expected) in zip(result.images.suffix(2), manualSizes) {
+            guard let data = try? Data(contentsOf: capture), let rep = NSBitmapImageRep(data: data),
+                  rep.pixelsWide == expected.0, rep.pixelsHigh == expected.1 else {
+                throw failure("Manual crop did not save the selected area at its own size")
+            }
+        }
+        let pendingSession = PromptModeSession()
+        var callbacks: [@MainActor (PromptScreenshot?) -> Void] = []
+        let operation: PromptModeSession.AreaCapture = { _, completion in callbacks.append(completion) }
+        pendingSession.captureArea(CGRect(x: 0, y: 0, width: 16, height: 12), using: operation)
+        pendingSession.captureArea(CGRect(x: 4, y: 4, width: 20, height: 14), using: operation)
+        pendingSession.stopListening()
+        let pending = Task { try await pendingSession.saveReferences(transcript: "", directory: directory) }
+        await Task.yield()
+        callbacks[1](try frame.screenshot().cropped(to: CGRect(x: 4, y: 4, width: 20, height: 14)))
+        callbacks[0](try frame.screenshot().cropped(to: CGRect(x: 0, y: 0, width: 16, height: 12)))
+        let pendingResult = try await pending.value
+        guard pendingResult.images.count == 2,
+              NSBitmapImageRep(data: try Data(contentsOf: pendingResult.images[0]))?.pixelsWide == 16,
+              NSBitmapImageRep(data: try Data(contentsOf: pendingResult.images[1]))?.pixelsWide == 20 else {
+            throw failure("Finishing lost in-flight captures or reversed click order")
+        }
+        let cancelledManual = PromptModeSession()
+        var late: (@MainActor (PromptScreenshot?) -> Void)?
+        cancelledManual.captureArea(.zero, using: { _, callback in late = callback })
+        cancelledManual.cancel()
+        late?(try frame.screenshot())
+        guard cancelledManual.manualCaptures.isEmpty else { throw failure("Late capture escaped cancellation") }
+
+        session.cancel()
+        guard session.manualCaptures.isEmpty else { throw failure("Cancelled session retained manual captures") }
+        let directCrop = try frame.screenshot(cropping: CGRect(x: 4, y: 4, width: 20, height: 14))
+        let originalCrop = try frame.screenshot().cropped(to: CGRect(x: 4, y: 4, width: 20, height: 14))
+        guard directCrop.png == originalCrop.png, directCrop.region == originalCrop.region else { throw failure("Direct crop changed selected pixels") }
+        // On-demand captures arrive as CGImages at full pixel density; check the encoder they use.
+        guard let retina = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 1600, pixelsHigh: 1200, bitsPerSample: 8, samplesPerPixel: 4,
+                hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 6400, bitsPerPixel: 32) else { throw failure("Retina fixture") }
+        memset(retina.bitmapData!, 90, 6400 * 1200)
+        let retinaRegion = CGRect(x: 300, y: 200, width: 800, height: 600)
+        guard let encoded = PromptScreenshot.encode(retina.cgImage!, region: retinaRegion),
+              let decoded = NSBitmapImageRep(data: encoded.png), decoded.pixelsWide == 1600, decoded.pixelsHigh == 1200,
+              encoded.region == retinaRegion, encoded.pointer == CGPoint(x: 800, y: 600),
+              let preview = encoded.thumbnail, max(preview.width, preview.height) == 420 else {
+            throw failure("On-demand capture lost pixel density, region, pointer or its deck thumbnail")
+        }
+        let cocoa = CGRect(x: -1200, y: 880, width: 800, height: 600)
+        let screen = CGRect(x: -1440, y: 700, width: 1440, height: 900)
+        let quartz = CGRect(x: -1440, y: -700, width: 1440, height: 900)
+        let converted = PromptScreenshot.quartzRect(fromCocoa: cocoa, screenFrame: screen, quartzBounds: quartz)
+        guard PromptScreenshot.cocoaRect(fromQuartz: converted, screenFrame: screen, quartzBounds: quartz) == cocoa else { throw failure("Offset display conversion") }
+
+        let capped = PromptModeSession(frames: [frame], words: [.init(text: "here", start: 1.2, end: 1.4)], audioOrigin: 100)
+        for _ in 0..<64 { guard capped.addManualCapture(directCrop) else { throw failure("Early manual capture limit") } }
+        guard !capped.addManualCapture(directCrop) else { throw failure("Capture limit accepted a 65th screenshot") }
+        let cappedResult = try await capped.saveReferences(transcript: "here", directory: directory)
+        guard cappedResult.images.count == 64, cappedResult.references.allSatisfy({ $0.seconds < 0 }), !cappedResult.warnings.isEmpty else {
+            throw failure("Spoken references silently displaced accepted manual captures")
+        }
+
+        // The first reference comes 2.8 s after the only frame, beyond the matching window.
+        let missingFirst = PromptModeSession(frames: [frame], words: [.init(text: "here", start: 4, end: 4.1), .init(text: "here", start: 1.2, end: 1.4)], audioOrigin: 100)
+        missingFirst.addManualCapture(directCrop)
+        let mixed = try await missingFirst.saveReferences(transcript: "here here", directory: directory)
+        guard mixed.references.map(\.number) == [1, 2], Set(mixed.images).count == 2,
+              mixed.references[0].cueIndex == 1, mixed.references[1].cueIndex == nil,
+              try Data(contentsOf: mixed.images[0]) != Data(contentsOf: mixed.images[1]) else {
+            throw failure("An unmatched spoken reference caused manual screenshot filename collisions")
+        }
+
+        let silentSession = PromptModeSession()
+        silentSession.addManualCapture(directCrop)
+        var silentDelivery = ""
+        var silentAttachments = 0
+        let silent = AppState(preview: true, api: DictationAPI(transport: PromptProbeTransport(emptySpeech: true)),
+            outputPasteboard: NSPasteboard(name: .init("com.s2t.prompt.silent." + UUID().uuidString)), promptSession: silentSession,
+            insertPromptImages: { images, _, board, beforeText in silentAttachments = images.count; return .init(sentCount: images.count, issue: nil, clipboardChange: board.changeCount, confirmation: .confirmed) },
+            insertText: { text, _ in silentDelivery = text; return .textSent })
+        silent.transcriptionProvider = .assemblyAI
+        silent.processingProvider = .openRouter
+        silent.assemblyKey = "fixture"
+        silent.routerKey = "fixture"
+        silent.processRecording(WaveAudio.encode(samples: Array(repeating: 0, count: 24000), sampleRate: 48000))
+        for _ in 0..<200 {
+            if silent.phase == .complete || silent.phase == .failed { break }
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+        guard silent.phase == .complete, silentAttachments == 1, silentDelivery.contains("[attached screenshot: [1]]") else {
+            throw failure("A screenshot-only prompt was blocked by empty speech: phase=\(silent.phase), images=\(silentAttachments), error=\(silent.errorMessage ?? silent.notice ?? "none")")
+        }
+
+        let tooSmall = PromptScreenshot(png: sourcePNG, pointer: .zero, region: CGRect(x: 0, y: 0, width: 32, height: 24))
+        let tiny = try? tooSmall.cropped(to: CGRect(x: 0, y: 0, width: 2, height: 2))
+        guard tiny == nil else { throw failure("Tiny selection accepted") }
+        print("Manual captures: cropped selections, numbering after spoken references, cancellation and undersized rejection PASS using generated PNGs.")
     }
+
     private static func verifyShortcuts() async throws {
         let shortcut = ActivationShortcut(verification: true)
         defer { shortcut.stop() }
@@ -372,6 +433,25 @@ import S2TCore
         try await settle()
         guard prompt == [.start, .stop] else { throw failure("Second prompt tap did not stop") }
         prompt = []
+        let pointer = PromptRegionCapture(present: false)
+        pointer.start()
+        var clicks = 0
+        pointer.onClick = { _ in clicks += 1 }
+        shortcut.onPromptPointer = { type, event in pointer.receive(type: type, event: event) }
+        listening = true
+        _ = shortcut.receive(type: .flagsChanged, event: event(54, right))
+        let mouse = CGEvent(source: nil)!
+        mouse.flags = right
+        mouse.location = CGPoint(x: 150, y: 150)
+        guard shortcut.receive(type: .leftMouseDown, event: mouse), shortcut.receive(type: .leftMouseUp, event: mouse) else {
+            throw failure("Command capture leaked into the receiving app")
+        }
+        _ = shortcut.receive(type: .flagsChanged, event: event(54))
+        try await settle()
+        guard prompt.isEmpty, clicks == 1 else { throw failure("Capture Command release stopped a latched prompt") }
+        pointer.stop()
+        shortcut.onPromptPointer = nil
+        listening = false
         shortcut.configurePrompt(key: nil)
         _ = shortcut.receive(type: .flagsChanged, event: event(54, right))
         _ = shortcut.receive(type: .flagsChanged, event: event(54))
@@ -396,27 +476,27 @@ import S2TCore
 }
 
 private struct PromptProbeTransport: HTTPTransport {
-    var needsImage: Bool
-    var status = 200
     var cleanupFails = false
-    var delay: UInt64 = 0
+    var emptySpeech = false
     func data(for request: URLRequest) async throws -> (Data, HTTPURLResponse) {
-        if request.url?.path.hasSuffix("/endpoints") == true {
-            return (Data(#"{"data":{"architecture":{"input_modalities":["text","image"],"output_modalities":["text"]}}}"#.utf8), HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
-        }
-        if request.url?.path == "/transcribe" {
-            return (Data(#"{"text":"Please fix this button, look here."}"#.utf8), HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+        if request.url?.path == "/v1/transcribe" {
+            return (Data((emptySpeech ? #"{"text":""}"# : #"{"text":"Please fix this button, look here. Keep the footer."}"#).utf8), HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
         }
         let body = try JSONSerialization.jsonObject(with: request.httpBody!) as! [String: Any]
         let messages = body["messages"] as? [[String: Any]] ?? []
-        if messages.last?["content"] is String {
-            return (Data(#"{"choices":[{"finish_reason":"stop","message":{"content":"Please fix this button."}}]}"#.utf8), HTTPURLResponse(url: request.url!, statusCode: cleanupFails ? 500 : 200, httpVersion: nil, headerFields: nil)!)
+        if let source = messages.last?["content"] as? String {
+            let text = try JSONDecoder().decode([String: String].self, from: Data(source.utf8))["dictated_text"]!
+            let data = try JSONSerialization.data(withJSONObject: ["choices": [["finish_reason": "stop", "message": ["content": text]]]])
+            return (data, HTTPURLResponse(url: request.url!, statusCode: cleanupFails ? 500 : 200, httpVersion: nil, headerFields: nil)!)
         }
-        if delay > 0 { try await Task.sleep(nanoseconds: delay) }
-        let parts = messages.last?["content"] as? [[String: Any]] ?? []
-        let count = parts.filter { $0["type"] as? String == "image_url" }.count
-        let content = try JSONSerialization.data(withJSONObject: ["descriptions": Array(repeating: "A blue Save button beside a gray Cancel button.", count: count)])
-        let response = try JSONSerialization.data(withJSONObject: ["choices": [["finish_reason": "stop", "message": ["content": String(data: content, encoding: .utf8)!]]]])
-        return (response, HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil, headerFields: nil)!)
+        throw ServiceError.message("Unexpected non-text cleanup request")
+    }
+}
+
+private struct PromptProbeCodex: CodexServing {
+    let fails: Bool
+    func complete(instructions: String, prompt: String, model: String, executable: String, options: CodexOptions) async throws -> String {
+        if fails { throw ServiceError.message("Synthetic Codex failure") }
+        return try JSONDecoder().decode([String: String].self, from: Data(prompt.utf8))["dictated_text"]!
     }
 }

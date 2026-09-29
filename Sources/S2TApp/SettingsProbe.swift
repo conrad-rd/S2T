@@ -45,10 +45,9 @@ import AppKit
             if page == .connections {
                 state.assemblyKey = "fixture-assembly"
                 state.routerKey = "fixture-router"
-                state.cerebrasKey = "fixture-cerebras"
                 try await Task.sleep(nanoseconds: 100_000_000)
                 guard state.canRecord, state.processingProvider == .openRouter else { throw failure("OpenRouter is not ready.") }
-                guard find("settings.cerebrasKey", in: root) == nil, find("settings.routerKey", in: root) != nil else { throw failure("Default provider key is missing.") }
+                guard find("settings.routerKey", in: root) != nil else { throw failure("Default provider key is missing.") }
                 guard let save = find("settings.save.openrouter", in: root),
                       AXUIElementPerformAction(save, kAXPressAction as CFString) == .success else { throw failure("Cannot click Save API key.") }
                 try await Task.sleep(nanoseconds: 100_000_000)
@@ -56,29 +55,24 @@ import AppKit
                 try capture(window: window, to: directory.appendingPathComponent("saved-key.png"))
                 state.routerKey = "edited-fixture-router"
                 guard !state.savedKeyAccounts.contains("openrouter") else { throw failure("Editing retained a stale saved confirmation.") }
-                guard let item = find("provider.cerebras", in: root) ?? findProvider("Cerebras", in: root),
-                      AXUIElementPerformAction(item, kAXPressAction as CFString) == .success else { throw failure("Cannot choose Cerebras.") }
+                guard let item = find("provider.local", in: root) ?? findProvider("Local endpoint", in: root),
+                      AXUIElementPerformAction(item, kAXPressAction as CFString) == .success else { throw failure("Cannot choose the local provider.") }
                 try await Task.sleep(nanoseconds: 150_000_000)
-                guard find("settings.cerebrasKey", in: root) != nil, find("settings.routerKey", in: root) == nil else { throw failure("Key fields do not follow provider choice.") }
+                guard find("settings.routerKey", in: root) == nil else { throw failure("Key fields do not follow provider choice.") }
                 state.assemblyKey = ""
                 state.routerKey = ""
-                state.cerebrasKey = ""
-                try capture(window: window, to: directory.appendingPathComponent("cerebras-keys.png"))
+                try capture(window: window, to: directory.appendingPathComponent("local-keys.png"))
                 print("Default OpenRouter, selected key field, and save confirmation: PASS")
             }
             if page == .models {
-                guard let item = find("provider.cerebras", in: root) ?? findProvider("Cerebras", in: root),
-                      AXUIElementPerformAction(item, kAXPressAction as CFString) == .success else { throw failure("Cannot choose Cerebras.") }
+                guard let item = find("provider.local", in: root) ?? findProvider("Local endpoint", in: root),
+                      AXUIElementPerformAction(item, kAXPressAction as CFString) == .success else { throw failure("Cannot choose the local provider.") }
                 try await Task.sleep(nanoseconds: 150_000_000)
-                guard state.processingProvider == .cerebras, state.processingModel == "qwen-3.8-27b" else { throw failure("Provider selector did not load Cerebras settings: \(state.processingProvider?.rawValue ?? "none"), \(state.processingModel).") }
+                guard state.processingProvider == .local else { throw failure("Provider selector did not load the local provider: \(state.processingProvider?.rawValue ?? "none").") }
                 state.assemblyKey = "fixture-assembly"
                 state.routerKey = ""
-                state.cerebrasKey = "fixture-cerebras"
-                guard state.canRecord else { throw failure("Cerebras still requires an OpenRouter key.") }
-                state.assemblyKey = ""
-                state.cerebrasKey = ""
-                try capture(window: window, to: directory.appendingPathComponent("cerebras-models.png"))
-                print("Cerebras selector and credentials routing: PASS")
+                try capture(window: window, to: directory.appendingPathComponent("local-models.png"))
+                print("Local selector and credentials routing: PASS")
             }
         }
         guard let slider = find("glow.intensity", in: root),

@@ -17,9 +17,10 @@ final class ModelRoutingTests: XCTestCase {
     }
 
     func testEndpointDefaultIsOnlyForOpenRouter() {
-        XCTAssertEqual(ProcessingProvider.openRouter.defaultEndpoint, "cerebras/fp16")
+        XCTAssertNil(ProcessingProvider.openRouter.defaultEndpoint)
         XCTAssertEqual(ProcessingProvider.openRouter.defaultModel, "openai/gpt-oss-120b")
-        XCTAssertNil(ProcessingProvider.cerebras.defaultEndpoint)
+        XCTAssertNil(ProcessingProvider.local.defaultEndpoint)
+        XCTAssertNil(ProcessingProvider.codex.defaultEndpoint)
     }
 
     func testSelectedModelAndExactEndpointReachOpenRouterWithoutDiscovery() async throws {
@@ -42,20 +43,20 @@ final class ModelRoutingTests: XCTestCase {
         let transport = ScriptedTransport([.init(path: "/v1/chat/completions", status: 200,
             json: #"{"choices":[{"finish_reason":"stop","message":{"content":"Done."}}]}"#)])
         _ = try await DictationAPI(transport: transport).process(text: "hello", mode: .clean,
-            model: "gpt-oss-120b", apiKey: "cerebras-fixture", provider: .cerebras, endpoint: "cerebras/fp16")
+            model: "gpt-oss-120b", apiKey: "router-fixture", provider: .local, endpoint: "cerebras/fp16", localURL: LocalEndpoint.defaultProcessingURL)
         let requests = await transport.requests
         let body = try XCTUnwrap(JSONSerialization.jsonObject(with: requests[0].httpBody!) as? [String: Any])
         XCTAssertEqual(body["model"] as? String, "gpt-oss-120b")
         XCTAssertNil(body["provider"])
     }
 
-    func testClearedEndpointDoesNotAddProviderRestrictions() async throws {
+    func testClearedEndpointKeepsPrivacyWithoutPinningAHost() async throws {
         let transport = ScriptedTransport([.init(path: "/api/v1/chat/completions", status: 200,
             json: #"{"choices":[{"finish_reason":"stop","message":{"content":"Done."}}]}"#)])
         _ = try await DictationAPI(transport: transport).process(text: "hello", mode: .clean,
             model: "provider/selected", apiKey: "fixture", endpoint: " ")
         let requests = await transport.requests
         let body = try XCTUnwrap(JSONSerialization.jsonObject(with: requests[0].httpBody!) as? [String: Any])
-        XCTAssertNil(body["provider"])
+        XCTAssertEqual(body["provider"] as? [String: String], ["data_collection": "deny"])
     }
 }

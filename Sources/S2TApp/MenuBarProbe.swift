@@ -12,7 +12,6 @@ import S2TCore
         state.menuAppearance = "system"
         state.assemblyKey = ""
         state.routerKey = ""
-        state.cerebrasKey = ""
         let controller = MenuBarController(state: state)
         defer { NSStatusBar.system.removeStatusItem(controller.statusItem); state.cancel() }
         guard let icon = NSImage(named: "MenuBar"), icon.isValid,
@@ -51,11 +50,11 @@ import S2TCore
         let keys = item("keys", in: root)!.submenu!
         let processing = item("keys.processing", in: keys)!.submenu!
         controller.menuNeedsUpdate(processing)
-        (item("provider.cerebras", in: processing) as? ActionMenuItem)?.invoke()
-        guard state.processingProvider == .cerebras else { throw failure("Provider selection failed.") }
+        (item("provider.local", in: processing) as? ActionMenuItem)?.invoke()
+        guard state.processingProvider == .local else { throw failure("Provider selection failed.") }
         controller.menuNeedsUpdate(processing)
         guard let alternate = processing.items.compactMap({ $0.view as? MenuValueEditor }).first,
-              alternate.field is NSSecureTextField else { throw failure("Provider editor is not secure.") }
+              alternate.field.cell is NSSecureTextFieldCell else { throw failure("Provider editor is not secure.") }
         state.processingProvider = .openRouter
         print("All settings submenus, mode, hold, appearance, and provider actions: PASS")
 
@@ -117,9 +116,9 @@ import S2TCore
                               let processing = item("keys.processing", in: keys)?.submenu,
                               let initialEditor = processing.items.compactMap({ $0.view as? MenuValueEditor }).first,
                               initialEditor.window != nil else { return }
-                        guard let choice = item("provider.cerebras", in: processing) as? ActionMenuItem else { throw failure("Provider control missing.") }
+                        guard let choice = item("provider.local", in: processing) as? ActionMenuItem else { throw failure("Provider control missing.") }
                         choice.invoke()
-                        guard state.processingProvider == .cerebras,
+                        guard state.processingProvider == .local,
                               let replacement = processing.items.compactMap({ $0.view as? MenuValueEditor }).first,
                               replacement.window != nil, TextInsertion.menuIsOpen,
                               choice.state == .on else { throw failure("Provider click closed the menu or failed to update.") }
@@ -129,7 +128,7 @@ import S2TCore
                         print("Provider clicks keep the menu open and update the editor: PASS")
                         try capture(window, to: directory.appendingPathComponent("provider-submenu.png"))
                         editor.pasteButton.performClick(nil)
-                        guard state.routerKey == "synthetic-menu-key", state.cerebrasKey.isEmpty else { throw failure("Paste reached the wrong provider or failed.") }
+                        guard state.routerKey == "synthetic-menu-key" else { throw failure("Paste reached the wrong provider or failed.") }
                         editor.saveButton.performClick(nil)
                         guard state.savedKeyAccounts.contains("openrouter"), editor.saveButton.title == "✓ Saved" else { throw failure("Save confirmation failed.") }
                         try capture(window, to: directory.appendingPathComponent("saved-submenu.png"))

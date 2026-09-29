@@ -71,6 +71,18 @@ final class GlowPlacementTests: XCTestCase {
         XCTAssertEqual(layout.frame.maxY, external.frame.maxY)
     }
 
+    func testTopJoinDistanceIsContinuousAcrossBothSideBoundaries() {
+        let layout = TopGlowLayout(display: mac())
+        let notch = layout.notch!
+        for edge in [notch.minX, notch.maxX] {
+            for y in stride(from: 0.25, through: 5.75, by: 0.25) {
+                let left = layout.distance(at: CGPoint(x: edge - 0.001, y: y))
+                let right = layout.distance(at: CGPoint(x: edge + 0.001, y: y))
+                XCTAssertLessThanOrEqual(abs(left - right), 0.00201)
+            }
+        }
+    }
+
     func testTopJoinsRoundIntoBothNotchSides() {
         let layout = TopGlowLayout(display: mac())
         let notch = layout.notch!

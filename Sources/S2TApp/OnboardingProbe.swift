@@ -90,33 +90,7 @@ import S2TCore
         _ = shortcut.receive(type: .keyDown, event: keyEvent(53, []))
         try check(!shortcut.isTesting && !shortcut.testPassed, "Escape must cancel a shortcut test")
         let state = AppState(preview: true)
-        shortcut.canCancel = { state.canCancel }
-        var cancellations = 0
-        shortcut.onCancel = { cancellations += 1; state.cancel() }
-        for phase: DictationPhase in [.preparing, .recording, .transcribing, .processing] {
-            state.phase = phase
-            state.rawTranscript = "Keep previous text"
-            try check(shortcut.receive(type: .keyDown, event: keyEvent(53, [])), "Escape must consume cancellation during \(phase)")
-            try await Task.sleep(nanoseconds: 10_000_000)
-            try check(state.phase == .idle && state.rawTranscript == "Keep previous text", "Escape must cancel without losing retained text")
-            try check(shortcut.receive(type: .keyDown, event: keyEvent(53, [])), "Held Escape must not leak repeats")
-            try check(shortcut.receive(type: .keyUp, event: keyEvent(53, [])), "Consumed Escape must consume its release")
-        }
-        try check(cancellations == 4, "Escape repeats must not cancel twice")
-        state.phase = .complete
-        state.isWaitingToPaste = true
-        _ = shortcut.receive(type: .keyDown, event: keyEvent(53, []))
-        try await Task.sleep(nanoseconds: 10_000_000)
-        try check(!state.isWaitingToPaste && state.phase == .idle, "Escape must cancel deferred delivery")
-        _ = shortcut.receive(type: .keyUp, event: keyEvent(53, []))
-        try check(!shortcut.receive(type: .keyDown, event: keyEvent(53, [])), "Idle Escape must pass through")
-        actions = []
-        _ = shortcut.receive(type: .flagsChanged, event: keyEvent(63, .maskSecondaryFn))
-        _ = shortcut.receive(type: .keyDown, event: keyEvent(53, .maskSecondaryFn))
-        _ = shortcut.receive(type: .keyUp, event: keyEvent(53, .maskSecondaryFn))
-        _ = shortcut.receive(type: .flagsChanged, event: keyEvent(63, []))
-        try await Task.sleep(nanoseconds: 10_000_000)
-        try check(actions == [.start] && cancellations == 6, "Escape must cancel a queued hold without finishing on key release")
+        try await HoldEscapeProbe.run()
         state.microphoneAccess = .notDetermined
         state.shortcutAccessGranted = false
         try check(!state.dictationPermissionsReady && state.permissionActionTitle == "Allow microphone…", "First step must request the microphone")
@@ -128,20 +102,22 @@ import S2TCore
         try check(state.permissionActionTitle == "Open Microphone settings…", "Denied microphone must have a recovery action")
         state.microphoneAccess = .restricted
         try check(state.permissionActionTitle == "Microphone access is restricted", "Restricted permission must not offer a futile request")
-        let controller = MenuBarController(state: state)
-        defer { NSStatusBar.system.removeStatusItem(controller.statusItem) }
+        let controller = MenuBarController(state: state, presentsAppearanceWindow: false)
+        defer { NSStatusBar.system.removeStatusItem(controller.statusItem); controller.appearanceWindow.window?.close() }
         controller.menuNeedsUpdate(controller.menu)
-        let setup = controller.menu.items.first { $0.identifier?.rawValue == "setup" }!.submenu!
-        controller.menuNeedsUpdate(setup)
-        let permissions = setup.items.first { $0.identifier?.rawValue == "permissions.setup" }!
-        try check(!permissions.isEnabled, "Managed microphone denial must disable the action")
+        let settings = controller.appearanceWindow
+        settings.showDictation()
+        try check(settings.showingDictation && settings.dictationPane.superview != nil,
+                  "Onboarding must be reachable in hidden Dictation settings")
         state.microphoneAccess = .authorized
-        controller.refreshStatus()
-        try check(permissions.isHidden, "Completed permissions must update in place")
-        try check(setup.items.contains { $0.identifier?.rawValue == "setup.keys" && $0.submenu == nil && $0.action != nil }, "Settings key editors must be reachable from setup")
-        try check(setup.items.contains { $0.identifier?.rawValue == "setup.test" && $0.view == nil }, "Shortcut test must use a native menu row")
+        settings.showAPIKeys()
+        try check(settings.showingKeys && settings.apiKeysPane.view.superview != nil,
+                  "Provider keys must be reachable from Settings")
+        settings.showDictation()
+        try check(settings.showingDictation && state.dictationPermissionsReady,
+                  "Completed permission state must remain available in Dictation settings")
         try check(NSApp.windows.allSatisfy { !$0.isVisible || $0.level != .normal }, "Verification must not show onboarding windows")
         print("Native Fn apply/get functions available: \(NativeFnPreferences.update != nil && NativeFnPreferences.get != nil). Resolved only, never called during verification.")
-        print("Onboarding verified: Fn apply/restore/retry/crash recovery, installation guard, permission progression, and menu updates. No real permissions, keys, clipboard, or keyboard preferences changed.")
+        print("Onboarding verified: Fn apply/restore/retry/crash recovery, installation guard, permission progression, and hidden Settings navigation. No real permissions, keys, clipboard, or keyboard preferences changed.")
     }
 }

@@ -25,9 +25,18 @@ import S2TCore
         guard !web.isLoading else { throw ServiceError.message("Generated browser fixture did not load.") }
         let words = "I like the processing animation, like here, or like here. Zoom in here showing the notch. Keep the logo and remove the subtitle. Change the CSS. Grüße 日本語 👩🏽‍💻 e\u{301}. "
         let text = String(repeating: words, count: 4).trimmingCharacters(in: .whitespaces) + "\n\n[Visual references · Prompt set fixture]\nReference 1, at 43.5s: The surrounding panel. Image: fixture-reference-1.png\nReference 2, at 48.0s: The notch. Image: fixture-reference-2.png"
+        let board = NSPasteboard(name: .init("S2T.BrowserUnicode.\(UUID().uuidString)"))
+        defer { board.releaseGlobally() }
         for target in ["rich", "plain"] {
             _ = try await web.evaluateJavaScript("document.getElementById('\(target)').focus()")
-            web.insertText(text)
+            let outcome = try await TextInsertion.sendUnicode(text, to: 123, pasteboard: board,
+                copyAfterDelivery: false,
+                canPost: { true }, post: { event, _ in
+                    if event.type == .keyDown, let native = NSEvent(cgEvent: event), let characters = native.characters {
+                        web.insertText(characters)
+                    }
+                })
+            guard outcome == .textSent else { throw ServiceError.message("Unicode fallback failed in browser fixture") }
             var actual = ""
             for _ in 0..<100 {
                 actual = try await web.evaluateJavaScript("document.getElementById('\(target)').\(target == "rich" ? "innerText" : "value")") as? String ?? ""
@@ -42,6 +51,6 @@ import S2TCore
             guard Array(actual.utf16) == Array(text.utf16), submissions == 0,
                   !window.isVisible else { throw ServiceError.message("Browser \(target) editor changed or submitted the generated prompt.") }
         }
-        print("Browser insertion: complete multiline prompt, reference order, Unicode and no submission PASS in hidden WebKit rich/plain editors using a single native text insertion. No user browser, screen pixels, real fields or clipboard used.")
+        print("Browser insertion: complete multiline prompt, reference order, Unicode and no submission PASS in hidden WebKit rich/plain editors using generated fallback event text. No events posted to a user browser, screen pixels or real fields; isolated clipboard.")
     }
 }

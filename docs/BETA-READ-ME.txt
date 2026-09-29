@@ -77,8 +77,8 @@ Usage is charged to your provider accounts. Credentials are stored in Keychain.
 S2T does not save recordings or transcripts to files.
 
 Prompt mode uses temporary screen recording while you dictate to collect visual
-references near the pointer. Selected images can be sent to your chosen vision
-provider and saved as PNG attachments. Use ordinary dictation when you do not
+references near the pointer. Selected images are saved as PNG attachments and
+attached to your prompt. Use ordinary dictation when you do not
 want visual references included.
 
 Clipboard context can retain up to 50 text copies for 48 hours in an encrypted

@@ -24,7 +24,7 @@ final class CredentialVaultTests: XCTestCase {
 
     func testExistingKeysMigrateWithoutPromptsOrDeletingOriginals() throws {
         let storage = Storage()
-        let original = ["assemblyai": "fixture-a", "openrouter": "fixture-b", "elevenlabs": "fixture-c", "cerebras": "fixture-d", "clipboard-history-encryption": "fixture-encryption"]
+        let original = ["assemblyai": "fixture-a", "openrouter": "fixture-b", "retired-provider": "fixture-c", "cerebras": "fixture-d", "clipboard-history-encryption": "fixture-encryption"]
         storage.items = original
         let vault = storage.vault()
         for (account, value) in original { XCTAssertEqual(try vault.read(account, allowInteraction: false), value) }
@@ -60,6 +60,23 @@ final class CredentialVaultTests: XCTestCase {
         let relaunched = storage.vault()
         XCTAssertEqual(try relaunched.read("openrouter", allowInteraction: false), "edited")
         XCTAssertEqual(try relaunched.read("cerebras", allowInteraction: false), "other")
+    }
+
+    func testEmptyKeySurvivesRelaunchWithoutRestoringLegacyCredential() throws {
+        let storage = Storage()
+        storage.items = ["openrouter": "legacy", "s2t-credits-connection": "legacy-connection"]
+        let vault = storage.vault()
+        try vault.save("other-key", account: "assemblyai", allowInteraction: false)
+        try vault.save("encryption-key", account: "clipboard-history-encryption", allowInteraction: false)
+        for account in ["openrouter", "s2t-credits-connection"] {
+            try vault.save("", account: account, allowInteraction: false)
+        }
+        let relaunched = storage.vault()
+        XCTAssertEqual(try relaunched.read("openrouter", allowInteraction: false), "")
+        XCTAssertEqual(try relaunched.read("s2t-credits-connection", allowInteraction: false), "")
+        XCTAssertEqual(try relaunched.read("assemblyai", allowInteraction: false), "other-key")
+        XCTAssertEqual(try relaunched.read("clipboard-history-encryption", allowInteraction: false), "encryption-key")
+        XCTAssertEqual(storage.items["openrouter"], "legacy")
     }
 
     func testCorruptVaultIsNeverReplacedWithEmptyCredentials() throws {

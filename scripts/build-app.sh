@@ -18,8 +18,27 @@ PYLOCK
 fi
 cd "$(dirname "$0")/.."
 source scripts/toolchain.sh
-APP="$(pwd)/build/S2T.app"
-S2T_PREVIOUS_BUILD=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP/Contents/Info.plist" 2>/dev/null || echo 0)
+S2T_FINAL_APP="$PWD/build/S2T.app"
+S2T_STAGE_ROOT=$(mktemp -d "$PWD/build/.app-stage-XXXXXXXX")
+APP="$S2T_STAGE_ROOT/S2T.app"
+S2T_BACKUP="$S2T_STAGE_ROOT/previous.app"
+cleanup() {
+    local status=$?
+    if [[ -e "$S2T_BACKUP" && ! -e "$S2T_FINAL_APP" ]]; then
+        mv "$S2T_BACKUP" "$S2T_FINAL_APP" || true
+    fi
+    if [[ -e "$S2T_BACKUP" && ! -e "$S2T_FINAL_APP" ]]; then
+        echo "Could not restore the previous app; preserving it at $S2T_BACKUP." >&2
+    else
+        case "$S2T_STAGE_ROOT" in "$PWD"/build/.app-stage-*) rm -rf "$S2T_STAGE_ROOT" ;; esac
+    fi
+    return "$status"
+}
+trap cleanup EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+S2T_PREVIOUS_BUILD=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$S2T_FINAL_APP/Contents/Info.plist" 2>/dev/null || echo 0)
 if [[ ! "$S2T_PREVIOUS_BUILD" =~ ^[0-9]+$ ]]; then S2T_PREVIOUS_BUILD=0; fi
 S2T_BUILD_NUMBER=$((S2T_PREVIOUS_BUILD + 1))
 S2T_VERSION=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Resources/Info.plist)
@@ -33,14 +52,14 @@ enum BuildIdentity {
     static let menuLabel = "S2T $S2T_VERSION · Build $S2T_BUILD_NUMBER"
 }
 EOF
-swift build --scratch-path .build/xcode -c release
-S2T_BIN_DIR=$(swift build --scratch-path .build/xcode -c release --show-bin-path)
+swift build --disable-sandbox --build-system native --scratch-path .build/xcode -c release
+S2T_BIN_DIR=$(swift build --disable-sandbox --build-system native --scratch-path .build/xcode -c release --show-bin-path)
 if [[ "${S2T_UNIVERSAL:-0}" == "1" ]]; then
     S2T_OTHER_ARCH=x86_64
     if [[ "$(uname -m)" == "x86_64" ]]; then S2T_OTHER_ARCH=arm64; fi
     S2T_OTHER_TRIPLE="$S2T_OTHER_ARCH-apple-macosx14.0"
-    swift build --scratch-path .build/beta-cross -c release --triple "$S2T_OTHER_TRIPLE"
-    S2T_OTHER_BIN_DIR=$(swift build --scratch-path .build/beta-cross -c release --triple "$S2T_OTHER_TRIPLE" --show-bin-path)
+    swift build --disable-sandbox --build-system native --scratch-path .build/beta-cross -c release --triple "$S2T_OTHER_TRIPLE"
+    S2T_OTHER_BIN_DIR=$(swift build --disable-sandbox --build-system native --scratch-path .build/beta-cross -c release --triple "$S2T_OTHER_TRIPLE" --show-bin-path)
 fi
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 if [[ "${S2T_UNIVERSAL:-0}" == "1" ]]; then
@@ -57,18 +76,49 @@ if [ -d "$APP/Contents/Resources/S2T_S2TCore.bundle" ]; then
     chmod -R u+w "$APP/Contents/Resources/S2T_S2TCore.bundle"
 fi
 cp -R "$S2T_BIN_DIR/S2T_S2TCore.bundle" "$APP/Contents/Resources/"
+mkdir -p "$APP/Contents/Resources/LocalModels"
+cp Resources/LocalModels/catalog.json Resources/LocalModels/worker.py Resources/LocalModels/requirements.txt Resources/LocalModels/response_text.py "$APP/Contents/Resources/LocalModels/"
 cp -R Resources/ThirdParty "$APP/Contents/Resources/"
 cp -R Resources/Appearance "$APP/Contents/Resources/"
+cp -R Resources/Typography "$APP/Contents/Resources/"
+mkdir -p "$APP/Contents/Resources/Dashboard/fonts"
+cp Resources/Dashboard/* "$APP/Contents/Resources/Dashboard/"
+cp billing-local/public/s2t.svg "$APP/Contents/Resources/Dashboard/"
+cp billing-local/public/fonts/* "$APP/Contents/Resources/Dashboard/fonts/"
+sed "s|url('/fonts/|url('fonts/|g" billing-local/public/style.css > "$APP/Contents/Resources/Dashboard/website.css"
+node scripts/build-policies.mjs --release --destination "$APP/Contents/Resources/policies"
+S2T_EXISTING_CREDITS_URL=""
+if [[ -f "$S2T_FINAL_APP/Contents/Info.plist" ]]; then
+    S2T_EXISTING_CREDITS_URL=$(/usr/libexec/PlistBuddy -c 'Print :S2TCreditsURL' "$S2T_FINAL_APP/Contents/Info.plist" 2>/dev/null || true)
+fi
 cp Resources/Info.plist "$APP/Contents/Info.plist"
+S2T_CREDITS_URL="${S2T_CREDITS_URL:-$S2T_EXISTING_CREDITS_URL}" python3 - "$APP/Contents/Info.plist" <<'PYCREDITS'
+import os, plistlib, sys
+from urllib.parse import urlsplit
+address = os.environ.get("S2T_CREDITS_URL", "")
+if address:
+    url = urlsplit(address)
+    if url.scheme != "https" or not url.hostname or url.username or url.password or url.path not in ("", "/") or url.query or url.fragment:
+        raise SystemExit("S2T_CREDITS_URL must be a public HTTPS origin")
+    with open(sys.argv[1], "rb") as source:
+        metadata = plistlib.load(source)
+    metadata["S2TCreditsURL"] = address.rstrip("/")
+    with open(sys.argv[1], "wb") as target:
+        plistlib.dump(metadata, target)
+PYCREDITS
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $S2T_BUILD_NUMBER" "$APP/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Add :S2TBuildDateUTC string $S2T_BUILD_DATE" "$APP/Contents/Info.plist"
-cp "Logo/Logo black fill.svg" Resources/Assets.xcassets/MenuBar.imageset/black.svg
-cp "Logo/Logo white fill.svg" Resources/Assets.xcassets/MenuBar.imageset/white.svg
 xcrun actool Resources/Assets.xcassets Logo/S2T.icon \
     --compile "$APP/Contents/Resources" --platform macosx \
     --minimum-deployment-target 14.0 --app-icon S2T \
-    --output-partial-info-plist build/icon-info.plist
+    --output-partial-info-plist "$S2T_STAGE_ROOT/icon-info.plist"
 python3 scripts/sanitize-app.py "$APP" "$PWD"
 codesign --force --sign - --identifier com.s2t.dictation --requirements '=designated => identifier "com.s2t.dictation"' "$APP"
 codesign --verify --deep --strict "$APP"
-echo "Built $APP"
+if [[ -e "$S2T_FINAL_APP" ]]; then mv "$S2T_FINAL_APP" "$S2T_BACKUP"; fi
+if ! mv "$APP" "$S2T_FINAL_APP"; then
+    if [[ -e "$S2T_BACKUP" ]]; then mv "$S2T_BACKUP" "$S2T_FINAL_APP"; fi
+    exit 1
+fi
+rm -rf "$S2T_BACKUP"
+echo "Built $S2T_FINAL_APP"

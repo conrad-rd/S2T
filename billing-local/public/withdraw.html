@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer"><title>Withdraw a contract · S2T</title><link rel="stylesheet" href="/policies/policy.css"><link rel="stylesheet" href="/withdraw.css"><script src="/withdraw.js" defer></script><link rel="icon" type="image/svg+xml" href="https://s2t.app/favicon.svg" /></head>
+<body><header><a href="https://s2t.app/">S2T</a></header><main>
+<h1>Withdraw a contract</h1><p>Vertrag widerrufen</p>
+<p>Submit a withdrawal without signing in or giving a reason. Identify the purchase, or the part you want to withdraw. This form records your declaration; it does not automatically issue a refund.</p>
+<form id="withdraw-form">
+<label for="name">Your name</label><input id="name" name="name" autocomplete="name" maxlength="200" required>
+<label for="email">Contact email</label><input id="email" name="email" type="email" autocomplete="email" maxlength="254" required>
+<label for="contract">Purchase or part of the contract</label><input id="contract" name="contract" maxlength="1000" required aria-describedby="reference-help"><p id="reference-help">Use a receipt reference, or the purchase date, amount and account email. Do not include card details.</p>
+<label class="delivery"><input id="delivery" type="checkbox" required>Send my receipt as a text file download in this browser. I can save it immediately.</label>
+<p>No confirmation email is sent by this form. You can also withdraw by emailing <a href="mailto:info@conrad-baulig.com">info@conrad-baulig.com</a> or writing to Conrad Baulig, Boisseréestraße 1, 50674 Köln, Deutschland.</p>
+<button id="review" type="submit">Review withdrawal</button>
+<section id="confirmation" hidden aria-labelledby="confirm-title"><h2 id="confirm-title" tabindex="-1">Confirm your declaration</h2><p>I withdraw from the contract or part identified below.</p><p id="review-details"></p><button id="confirm" type="button">Confirm withdrawal / Widerruf bestätigen</button></section>
+</form>
+<p id="withdraw-status" role="status" aria-live="polite"></p>
+<a id="receipt" hidden>Download your receipt again</a>
+<noscript><p>This form requires JavaScript. You can withdraw by email or post using the contact details above.</p></noscript>
+<p><a href="/policies/refunds.html">Withdrawal rights and refunds</a> · <a href="/policies/privacy.html">Privacy</a> · <a href="/policies/legal.html">Impressum</a></p>
+</main></body></html>

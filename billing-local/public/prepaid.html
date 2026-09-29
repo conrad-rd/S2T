@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Prepaid credits · S2T</title><link rel="icon" type="image/svg+xml" href="https://s2t.app/favicon.svg"><link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/prepaid.css"><script type="module" src="/prepaid.js"></script></head>
+<body class="prepaid-page">
+<header><a class="brand" href="https://s2t.app/" aria-label="S2T home"><img src="/s2t.svg" alt="S2T" width="64" height="42"></a><a class="site-action" href="/">Sign in</a></header>
+<main class="prepaid-layout">
+<div class="prepaid-intro"><h1 id="guest-title">Prepaid credits</h1><p id="guest-intro">Buy credits without signing in.</p></div>
+<div class="prepaid-content">
+<section id="guest-purchase" hidden>
+<form id="guest-buy">
+<p class="prepaid-total" aria-live="polite"><span id="guest-quote">500<span class="decimal-places">.0000</span></span><span class="credit-label">credits</span></p>
+<div class="prepaid-presets" role="group" aria-label="Purchase amount"><button type="button" class="site-choice" data-amount="5" aria-pressed="true">$5</button><button type="button" class="site-choice" data-amount="10" aria-pressed="false">$10</button><button type="button" class="site-choice" data-amount="20" aria-pressed="false">$20</button><button type="button" class="site-choice" data-amount="50" aria-pressed="false">$50</button><button type="button" class="site-choice" data-amount="100" aria-pressed="false">$100</button></div>
+<details class="custom-amount"><summary>Custom amount</summary><label for="guest-amount">Amount in USD, $5 to $100</label><div class="prepaid-amount"><span aria-hidden="true">$</span><input id="guest-amount" type="number" min="5" max="100" step="0.01" value="5" required inputmode="decimal"></div></details>
+<p id="email-option" hidden><label><input id="email-opt-in" type="checkbox"> Recover with my checkout email</label></p>
+<button id="guest-pay" class="site-choice pay-button" type="submit">Pay $5<span class="decimal-places">.00</span></button>
+</form>
+</section>
+<section id="guest-result" hidden>
+<p id="guest-balance" class="prepaid-total"></p>
+<label class="muted" for="guest-key">Your S2T key</label><input id="guest-key" class="key-field" readonly autocomplete="off" spellcheck="false"><button id="guest-copy" class="site-choice pay-button">Copy key</button>
+</section>
+<details id="guest-backup" hidden><summary>Save your recovery code</summary>
+<p class="muted">Save this before paying. It restores your key if this browser forgets your purchase.</p>
+<label class="sr-only" for="guest-code">Recovery code</label><input id="guest-code" class="key-field" readonly autocomplete="off" spellcheck="false"><button id="guest-download" class="site-action">Download recovery code</button>
+</details>
+<p id="guest-status" role="status" aria-live="polite" hidden></p>
+<details id="guest-recovery"><summary>Lost your key?</summary>
+<form id="code-recovery"><label class="muted" for="recover-code">Recovery code</label><input id="recover-code" class="key-field" autocomplete="off" required><button class="site-action">Recover key</button></form>
+<form id="email-recovery" hidden><label class="muted" for="recover-email">Checkout email</label><input id="recover-email" class="key-field" type="email" autocomplete="email" required><button class="site-action">Email a recovery link</button></form>
+</details>
+<nav class="prepaid-policies" aria-label="Purchase policies"><a href="/policies/terms.html">Terms</a><a href="/policies/refunds.html">Refunds</a><a href="/policies/privacy.html">Privacy</a></nav>
+</div>
+</main>
+</body></html>

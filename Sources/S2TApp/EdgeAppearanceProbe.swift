@@ -40,9 +40,9 @@ import S2TCore
             let image = bitmap(frame.images[1])
             let x: Double
             switch original.geometry {
-            case .bottom: x = original.size.width / 2
+            case .bottom, .windowBottom: x = original.size.width / 2
             case let .notch(layout): x = Double(layout.notch?.midX ?? CGFloat(original.size.width / 2))
-            case let .input(rect, _, _): x = rect.midX
+            case let .input(contour), let .withinInput(contour): x = contour.bounds.midX
             }
             let column = min(image.pixelsWide - 1, Int(x / original.size.width * Double(image.pixelsWide)))
             var weighted = 0.0, total = 0.0
@@ -70,8 +70,8 @@ import S2TCore
         let bitmap = NSBitmapImageRep(cgImage: cgImage)
         let inside: CGPoint?
         switch original.geometry {
-        case .bottom: inside = nil
-        case let .input(rect, _, _): inside = CGPoint(x: rect.midX, y: rect.minY + 2)
+        case .bottom, .windowBottom: inside = nil
+        case let .input(contour), let .withinInput(contour): inside = CGPoint(x: contour.bounds.midX, y: contour.bounds.minY + 2)
         case let .notch(layout): inside = layout.notch.map { CGPoint(x: $0.midX, y: $0.midY) }
         }
         if let inside {

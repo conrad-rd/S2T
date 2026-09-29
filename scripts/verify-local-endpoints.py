@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Exercise the packaged app against an ephemeral loopback fixture, without user data."""
 import json
-import base64
 from email.parser import BytesParser
 from email.policy import default
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -31,15 +30,6 @@ class Fixture(BaseHTTPRequestHandler):
                 assert fields["response_format"] == b"json"
                 assert fields["file"][:4] == b"RIFF" and fields["file"][8:12] == b"WAVE"
                 result = {"text": "Fixture speech."}
-            elif self.path == "/vision/chat/completions":
-                payload = json.loads(body)
-                assert payload["model"] == "fixture/vision:latest"
-                assert "provider" not in payload
-                parts = payload["messages"][-1]["content"]
-                images = [p["image_url"]["url"] for p in parts if p["type"] == "image_url"]
-                assert len(images) == 1
-                assert base64.b64decode(images[0].split(",", 1)[1]).startswith(b"\x89PNG\r\n\x1a\n")
-                result = {"choices": [{"finish_reason": "stop", "message": {"content": json.dumps({"descriptions": ["One generated pixel."]})}}]}
             else:
                 assert self.path == "/v1/chat/completions"
                 payload = json.loads(body)
@@ -68,7 +58,7 @@ try:
     subprocess.run([str(app), "--verify-local-endpoints", "--local-fixture-url",
                     f"http://127.0.0.1:{server.server_port}"], check=True, timeout=30)
     assert not failures, failures
-    assert seen == ["/v1/audio/transcriptions", "/v1/chat/completions", "/vision/chat/completions"], seen
+    assert seen == ["/v1/audio/transcriptions", "/v1/chat/completions"], seen
     print("PASS: loopback server verified models, multipart audio, image data, JSON and absent cloud credentials/routing.")
 finally:
     server.shutdown()

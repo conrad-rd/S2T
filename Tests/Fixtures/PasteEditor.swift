@@ -7,6 +7,12 @@ final class ReadOnlyAccessibilityEditor: NSTextView {
     }
 }
 
+final class SelectionlessEditor: NSTextView {
+    override func accessibilitySelectedTextRange() -> NSRange {
+        NSRange(location: NSNotFound, length: 0)
+    }
+}
+
 final class DeferredSelectionSearchField: NSSearchField {
     override func becomeFirstResponder() -> Bool {
         let result = super.becomeFirstResponder()
@@ -51,11 +57,16 @@ editor.string = "before selected after"
 editor.isRichText = false
 editor.allowsUndo = true
 editor.setAccessibilityIdentifier("probe.editor")
-let readOnlyEditor = ReadOnlyAccessibilityEditor(frame: NSRect(x: 20, y: 15, width: 430, height: 120))
+let readOnlyEditor = ReadOnlyAccessibilityEditor(frame: NSRect(x: 20, y: 80, width: 430, height: 55))
 readOnlyEditor.string = "before selected after"
 readOnlyEditor.isRichText = false
 readOnlyEditor.allowsUndo = true
 readOnlyEditor.setAccessibilityIdentifier("probe.readOnlyEditor")
+let selectionless = SelectionlessEditor(frame: NSRect(x: 20, y: 15, width: 430, height: 55))
+selectionless.string = "existing text"
+selectionless.isRichText = false
+selectionless.setAccessibilityIdentifier("probe.selectionless")
+content.addSubview(selectionless)
 content.addSubview(readOnlyEditor)
 content.addSubview(field)
 content.addSubview(editor)

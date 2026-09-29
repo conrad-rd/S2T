@@ -46,3 +46,17 @@ Compact ChatGPT and Gemini measured layouts now retain exact semicircular ends a
 The baseline tests reproduced the gap and fixed-radius mismatch with 32 failed assertions. Generated fixtures use an independent expected circular boundary to check inside/outside corner distances and native blur alpha. Hidden production panels verify all four physical edges and switching between circular and continuous contours. These fixtures establish the implementation's geometry, not pixel-perfect live website matching.
 
 Version 1.0.1, Build 291 passed 216 domain/service tests and the packaged input-outline, gradient-cycle, appearance-sliders, appearance-performance, menu-highlights and build-identity checks. Input-outline includes the new preset/flush-edge checks. Generated `build/input-flush-fixtures/flush-chatgpt.png` and `flush-claude.png` were inspected. They show authored fields, not captured app windows. The slider verification now preserves existing preview tuning when checking width/minimum/maximum persistence instead of assuming default tuning.
+
+## Rounded-corner scaling and refresh
+
+Automatic targeting no longer clamps measured padding to 8–16 points. It uses the smallest positive editor inset and fits the radius within both field dimensions. Unknown websites use circular corners rather than native continuous smoothing. Standalone fields without measurable external padding retain the existing eight-point fallback.
+
+Rounded preset radii scale with nearby controls instead of multiline editor height. ChatGPT and Gemini use the 30- and 29-point control metrics in their measured fixtures. Other presets use a nominal 28-point control metric. Compact icons take priority over wide model selectors. These nominal metrics remain estimates, not CSS measurements. A missing control metric retains the preset's unscaled radius. Capsule ends still derive directly from the full field height.
+
+The reader no longer reuses a shape classification solely because editor and container sizes match. It rebuilds the bounded local control snapshot on each read, so controls moving into a footer or an editor moving inside its wrapper can change the corners immediately. Editor identity caching, off-main-thread reads, deadlines, secure-field rejection and final focus checks remain.
+
+Independent scale tests reproduced 200 failed assertions before the correction. They cover 50–300 percent scale and multiline growth. Additional fixtures check that inserting wide model selectors preserves the radius and that moving controls inside unchanged bounds switches out of and back into a capsule. Accessibility does not expose actual CSS corner radius; these checks do not prove exact matching across every live app or website.
+
+Version 1.0.1, Build 298 passed 218 service/domain tests and the packaged input-outline, gradient-cycle, glow-clarity and build-identity checks. The new control-position regression passed through the production reader. A debug input-outline invocation timed out waiting for its initial backdrop profile; the packaged check passed. Packaging retried after concurrent source edits and retained the other work in the canonical app. No receiving apps were opened or inspected, and no screen pixels were captured.
+
+A concurrent package then advanced the canonical app to Build 299 with these changes retained. Its input-outline and build-identity checks also passed.

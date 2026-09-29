@@ -2,7 +2,7 @@ import AppKit
 
 @MainActor enum TextInsertion {
     static var menuIsOpen = false
-    static let eventMarker: Int64 = 0x5332545041535445
+    nonisolated static let eventMarker: Int64 = 0x5332545041535445
 
     @MainActor final class Target {
         let app: NSRunningApplication
@@ -10,6 +10,15 @@ import AppKit
         var restoreStart = false
         var field: AXUIElement?
         var selection: CFRange?
+        var dictionaryBaseline: String?
+        var promptDestination: PromptDestination?
+        var pasteCommand: Task<AXUIElement?, Never>?
+        var promptAccess = PromptDestinationAccess.system
+        var performPaste: ((AXUIElement) -> AXError)?
+        var recipientIsForeground: (() -> Bool)?
+        // Image attachment delivery can replace the text clipboard shortly after Paste.
+        var waitsForAttachmentClipboard = false
+        var textPastedAt: Double?
         private var tracking: Task<Void, Never>?
 
         init(app: NSRunningApplication, restoreFromS2T: Bool = false) {
@@ -44,13 +53,14 @@ import AppKit
     }
 
     enum Outcome: String {
-        case textSent, permissionRequired, noTarget, unavailable
+        case textSent, permissionRequired, noTarget, unavailable, destinationUnavailable
         var hint: String? {
             switch self {
             case .textSent: return nil
             case .permissionRequired: return "Allow Accessibility access to insert dictation. Your text is available in Last dictation."
             case .noTarget: return "Select a text field and retry. Your text is available in Last dictation."
             case .unavailable: return "Couldn't insert dictation. Your text is available in Last dictation."
+            case .destinationUnavailable: return "The field selected when dictation ended is unavailable. Your text is in Last dictation."
             }
         }
     }
@@ -78,15 +88,45 @@ import AppKit
         let captured = await Task.detached { focusedSelection(pid: pid) }.value
         guard !Task.isCancelled else { return nil }
         target.field = captured?.field
+        if target.field == nil { target.field = await Task.detached { focusedField(pid: pid) }.value }
+        guard !Task.isCancelled else { return nil }
         target.selection = captured?.range
         if target.field != nil { target.trackSelection() }
         return target
     }
 
-    static func insert(_ text: String, into target: Target?, pasteboard: NSPasteboard = .general) async throws -> Outcome {
+    static func rememberFinish(_ target: Target?) async -> Target? {
+        guard let target else { return nil }
+        let pid = target.app.processIdentifier
+        let captured = await Task.detached(priority: .userInitiated) { () -> (PromptDestination, String?)? in
+            guard let destination = PromptDestinationAccess.system.capture(pid: pid) else { return nil }
+            let reader = DictionaryFieldReader(pid: pid)
+            let baseline = reader.focused().flatMap { CFEqual($0, destination.field) ? reader.sample($0) : nil }
+            return (destination, baseline)
+        }.value
+        let destination = captured?.0
+        guard !Task.isCancelled, let destination else { return nil }
+        target.promptDestination = destination
+        target.field = destination.field
+        target.selection = destination.selection
+        target.dictionaryBaseline = captured?.1
+        target.pasteCommand = Task { await Task.detached { pasteCommand(pid: pid) }.value }
+        return target
+    }
+
+    static func promptDestinationIsCurrent(_ target: Target?, selection: Bool = false) async -> Bool {
+        guard let destination = target?.promptDestination else { return target == nil }
+        let access = target!.promptAccess
+        return await Task.detached { access.isCurrent(destination, selection: selection) }.value
+    }
+
+    typealias BeforePaste = @MainActor () async throws -> Bool
+
+    static func insert(_ text: String, into target: Target?, pasteboard: NSPasteboard = .general,
+                       beforePaste: BeforePaste? = nil, trusted: () -> Bool = AXIsProcessTrusted) async throws -> Outcome {
         try Task.checkCancellation()
         guard !text.isEmpty else { return .unavailable }
-        guard AXIsProcessTrusted() else { return .permissionRequired }
+        guard trusted() else { return .permissionRequired }
         var waitedForMenu = false
         while menuIsOpen {
             waitedForMenu = true
@@ -94,18 +134,39 @@ import AppKit
         }
         if waitedForMenu { try await Task.sleep(nanoseconds: 150_000_000) }
         try Task.checkCancellation()
+        if let target, target.promptDestination != nil {
+            guard !target.app.isTerminated, await promptDestinationIsCurrent(target) else { return .destinationUnavailable }
+            let command = await target.pasteCommand?.value
+            try Task.checkCancellation()
+            guard !menuIsOpen,
+                  (target.recipientIsForeground?() ?? (NSWorkspace.shared.frontmostApplication?.processIdentifier == target.app.processIdentifier)),
+                  await promptDestinationIsCurrent(target, selection: true) else { return .destinationUnavailable }
+            if let beforePaste, !(try await beforePaste()) { return .destinationUnavailable }
+            if let command {
+                var actionError = AXError.success
+                let outcome = pasteBatch(text, to: pasteboard) {
+                    actionError = target.performPaste?(command) ?? AXUIElementPerformAction(command, kAXPressAction as CFString)
+                    return actionError == .success
+                }
+                // Screenshots follow this text. Their hand-over waits out the rest of the clipboard settle time.
+                if outcome == .textSent && target.waitsForAttachmentClipboard { target.textPastedAt = ProcessInfo.processInfo.systemUptime }
+                if actionError != .actionUnsupported && actionError != .notImplemented { return outcome }
+            }
+            return try await sendUnicode(text, to: target.app.processIdentifier, pasteboard: pasteboard,
+                requiresForeground: false, destinationIsCurrent: { await promptDestinationIsCurrent(target) })
+        }
         var destination: (field: AXUIElement, range: CFRange)?
         if let target, target.restoreStart {
             await target.refreshSelection()
             target.stopTracking()
-            guard let field = target.field, let range = target.selection else { return .noTarget }
-            destination = (field, range)
+            guard let field = target.field else { return .noTarget }
+            if let range = target.selection { destination = (field, range) }
         }
         let returningFromS2T = NSWorkspace.shared.frontmostApplication.map(isS2T) == true
         if target?.restoreStart == true || returningFromS2T {
             guard let app = target?.app, !app.isTerminated else { return .noTarget }
             let pid = app.processIdentifier
-            if destination == nil {
+            if destination == nil && target?.restoreStart != true {
                 destination = await Task.detached { focusedSelection(pid: pid) }.value
             }
             try Task.checkCancellation()
@@ -118,33 +179,23 @@ import AppKit
                 }
                 try await Task.sleep(nanoseconds: 150_000_000)
             }
-            guard NSWorkspace.shared.frontmostApplication?.processIdentifier == pid else { return .noTarget }
+            guard NSWorkspace.shared.frontmostApplication?.processIdentifier == pid else {
+                diagnosticOutput?("return_to_recipient_activation_failed")
+                return .noTarget
+            }
         }
         try Task.checkCancellation()
         guard let recipient = NSWorkspace.shared.frontmostApplication, !isS2T(recipient), !recipient.isTerminated else { return .noTarget }
         let pid = recipient.processIdentifier
         if let target, target.restoreStart, target.app.processIdentifier != pid { return .noTarget }
-        let command = await Task.detached { () -> AXUIElement? in
-            let root = AXUIElementCreateApplication(pid)
-            AXUIElementSetMessagingTimeout(root, 0.2)
-            guard let menu = element(root, kAXMenuBarAttribute) else { return nil }
-            var pending = [(menu, 0)]
-            var visited = 0
-            while let (item, depth) = pending.popLast(), visited < 250 {
-                visited += 1
-                if (value(item, kAXMenuItemCmdCharAttribute) as? String)?.lowercased() == "v",
-                   (value(item, kAXMenuItemCmdModifiersAttribute) as? NSNumber)?.intValue == 0 { return item }
-                if depth < 4, let children = value(item, kAXChildrenAttribute) as? [AXUIElement] {
-                    pending.append(contentsOf: children.prefix(100).reversed().map { ($0, depth + 1) })
-                }
-            }
-            return nil
-        }.value
+        let command = await Task.detached { pasteCommand(pid: pid) }.value
         try Task.checkCancellation()
-        guard let command else { return .unavailable }
         guard !menuIsOpen, NSWorkspace.shared.frontmostApplication?.processIdentifier == pid else { return .noTarget }
         if let destination {
-            guard try await restore(destination, pid: pid) else { return .noTarget }
+            guard try await restore(destination, pid: pid) else {
+                diagnosticOutput?("return_to_recipient_selection_failed")
+                return .noTarget
+            }
         }
         try Task.checkCancellation()
         guard !menuIsOpen, NSWorkspace.shared.frontmostApplication?.processIdentifier == pid else { return .noTarget }
@@ -153,6 +204,10 @@ import AppKit
         try Task.checkCancellation()
         if let destination {
             guard let ready, CFEqual(ready.field, destination.field), equal(ready.range, destination.range) else { return .noTarget }
+        } else if let target, target.restoreStart {
+            let focused = await Task.detached { focusedField(pid: pid) }.value
+            try Task.checkCancellation()
+            guard let focused, let original = target.field, CFEqual(focused, original) else { return .noTarget }
         } else if let ready {
             guard try await restoreSelection(ready.range, read: {
                 guard !menuIsOpen, NSWorkspace.shared.frontmostApplication?.processIdentifier == pid else { return nil }
@@ -160,15 +215,76 @@ import AppKit
             }, write: { _ in false }) else { return .noTarget }
         }
         guard !menuIsOpen, NSWorkspace.shared.frontmostApplication?.processIdentifier == pid else { return .noTarget }
+        if let beforePaste, !(try await beforePaste()) { return .noTarget }
+        try Task.checkCancellation()
+        guard !menuIsOpen, NSWorkspace.shared.frontmostApplication?.processIdentifier == pid else { return .noTarget }
+        if beforePaste != nil {
+            return try await sendUnicode(text, to: pid, pasteboard: pasteboard, copyAfterDelivery: false)
+        }
+        guard let command else {
+            diagnosticOutput?("unicode_without_paste_menu")
+            return try await sendUnicode(text, to: pid, pasteboard: pasteboard)
+        }
+        var actionError = AXError.success
         let result = pasteBatch(text, to: pasteboard) {
-            AXUIElementPerformAction(command, kAXPressAction as CFString) == .success
+            actionError = AXUIElementPerformAction(command, kAXPressAction as CFString)
+            return actionError == .success
+        }
+        if actionError == .actionUnsupported || actionError == .notImplemented {
+            diagnosticOutput?("unicode_unsupported_paste_action")
+            return try await sendUnicode(text, to: pid, pasteboard: pasteboard)
         }
         if result == .textSent {
             diagnosticOutput?("native_paste_action")
-            // AXPress can enqueue the recipient's paste. Keep text available before an image attachment replaces it.
-            try await Task.sleep(nanoseconds: 250_000_000)
         }
         return result
+    }
+
+    nonisolated private static func pasteCommand(pid: pid_t) -> AXUIElement? {
+        PasteCommandSearch.find(pid: pid)
+    }
+
+    static func sendUnicode(_ text: String, to pid: pid_t, pasteboard: NSPasteboard,
+                            copyAfterDelivery: Bool = true,
+                            canPost: () -> Bool = { CGPreflightPostEventAccess() },
+                            isCurrent: () -> Bool = { true },
+                            requiresForeground: Bool = true,
+                            destinationIsCurrent: (() async -> Bool)? = nil,
+                            post: ((CGEvent, pid_t) -> Void)? = nil) async throws -> Outcome {
+        try Task.checkCancellation()
+        guard canPost() else { return .permissionRequired }
+        guard !text.isEmpty, let source = CGEventSource(stateID: .privateState) else { return .unavailable }
+        source.localEventsSuppressionInterval = 0
+        var chunks: [[UniChar]] = []
+        var chunk: [UniChar] = []
+        for scalar in text.unicodeScalars {
+            let units = Array(String(scalar).utf16)
+            if chunk.count + units.count > 20 { chunks.append(chunk); chunk = [] }
+            chunk.append(contentsOf: units)
+        }
+        if !chunk.isEmpty { chunks.append(chunk) }
+        if !copyAfterDelivery { chunks = text.map { Array(String($0).utf16) } }
+        for units in chunks {
+            try Task.checkCancellation()
+            if let destinationIsCurrent, !(await destinationIsCurrent()) { return .destinationUnavailable }
+            guard !menuIsOpen, isCurrent(),
+                  !requiresForeground || post != nil || NSWorkspace.shared.frontmostApplication?.processIdentifier == pid else { return .noTarget }
+            let lineBreak = !copyAfterDelivery && (units == [10] || units == [13] || units == [13, 10])
+            guard let down = CGEvent(keyboardEventSource: source, virtualKey: lineBreak ? 36 : 0, keyDown: true),
+                  let up = CGEvent(keyboardEventSource: source, virtualKey: lineBreak ? 36 : 0, keyDown: false) else { return .unavailable }
+            for event in [down, up] {
+                event.flags = lineBreak ? .maskShift : []
+                event.setIntegerValueField(.eventSourceUserData, value: eventMarker)
+                units.withUnsafeBufferPointer {
+                    event.keyboardSetUnicodeString(stringLength: $0.count, unicodeString: $0.baseAddress!)
+                }
+                if let post { post(event, pid) } else { event.postToPid(pid) }
+            }
+            try await Task.sleep(nanoseconds: copyAfterDelivery ? 5_000_000 : 1_000_000)
+        }
+        try Task.checkCancellation()
+        if copyAfterDelivery { _ = copy(text, to: pasteboard) }
+        return .textSent
     }
 
     private static func restore(_ destination: (field: AXUIElement, range: CFRange), pid: pid_t) async throws -> Bool {
@@ -225,8 +341,18 @@ import AppKit
         let axValue = raw as! AXValue
         var range = CFRange()
         guard AXValueGetType(axValue) == .cfRange, AXValueGetValue(axValue, .cfRange, &range),
-              range.location >= 0, range.length >= 0, range.location <= Int.max - range.length else { return nil }
+              range.location >= 0, range.location != NSNotFound, range.length >= 0, range.location <= Int.max - range.length else { return nil }
         return range
+    }
+
+    nonisolated private static func focusedField(pid: pid_t) -> AXUIElement? {
+        let root = AXUIElementCreateApplication(pid)
+        AXUIElementSetMessagingTimeout(root, 0.2)
+        guard let field = element(root, kAXFocusedUIElementAttribute) else { return nil }
+        AXUIElementSetMessagingTimeout(field, 0.2)
+        guard value(field, kAXSubroleAttribute) as? String != kAXSecureTextFieldSubrole,
+              let after = element(root, kAXFocusedUIElementAttribute), CFEqual(field, after) else { return nil }
+        return field
     }
 
     nonisolated private static func focusedSelection(pid: pid_t) -> (field: AXUIElement, range: CFRange)? {

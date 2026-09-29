@@ -1,0 +1,622 @@
+{
+  "source": "T3 in Helium, live Accessibility roles/geometry and fixed composer class markers only, September 14 2026. No field text or pixels.",
+  "editor": 232,
+  "expected": [
+    [
+      727,
+      981
+    ],
+    [
+      691,
+      158
+    ]
+  ],
+  "main": [
+    [
+      0,
+      0
+    ],
+    [
+      691,
+      130
+    ]
+  ],
+  "bar": [
+    [
+      19,
+      115
+    ],
+    [
+      652,
+      43
+    ]
+  ],
+  "nodes": [
+    {
+      "children": [
+        224,
+        245
+      ],
+      "childrenComplete": true,
+      "classes": [
+        "@container/composer-surface",
+        "group/composer-surface"
+      ],
+      "editable": false,
+      "frame": [
+        [
+          727,
+          981
+        ],
+        [
+          691,
+          158
+        ]
+      ],
+      "id": 223,
+      "role": "AXGroup",
+      "subrole": ""
+    },
+    {
+      "children": [
+        225
+      ],
+      "childrenComplete": true,
+      "classes": [],
+      "editable": false,
+      "frame": [
+        [
+          727,
+          981
+        ],
+        [
+          691,
+          130
+        ]
+      ],
+      "id": 224,
+      "parent": 223,
+      "role": "AXGroup",
+      "subrole": ""
+    },
+    {
+      "children": [
+        226
+      ],
+      "childrenComplete": true,
+      "classes": [],
+      "editable": false,
+      "frame": [
+        [
+          727,
+          981
+        ],
+        [
+          691,
+          130
+        ]
+      ],
+      "id": 225,
+      "parent": 224,
+      "role": "AXGroup",
+      "subrole": ""
+    },
+    {
+      "children": [
+        227
+      ],
+      "childrenComplete": true,
+      "classes": [],
+      "editable": false,
+      "frame": [
+        [
+          727,
+          981
+        ],
+        [
+          691,
+          130
+        ]
+      ],
+      "id": 226,
+      "parent": 225,
+      "role": "AXGroup",
+      "subrole": ""
+    },
+    {
+      "children": [
+        228
+      ],
+      "childrenComplete": true,
+      "classes": [],
+      "editable": false,
+      "frame": [
+        [
+          727,
+          981
+        ],
+        [
+          691,
+          130
+        ]
+      ],
+      "id": 227,
+      "parent": 226,
+      "role": "AXGroup",
+      "subrole": ""
+    },
+    {
+      "children": [
+        229,
+        235,
+        238,
+        239,
+        240,
+        241,
+        243,
+        244
+      ],
+      "childrenComplete": true,
+      "classes": [],
+      "editable": false,
+      "frame": [
+        [
+          727,
+          981
+        ],
+        [
+          691,
+          130
+        ]
+      ],
+      "id": 228,
+      "parent": 227,
+      "role": "AXGroup",
+      "subrole": ""
+    },
+    {
+      "children": [
+        230
+      ],
+      "childrenComplete": true,
+      "classes": [],
+      "editable": false,
+      "frame": [
+        [
+          727,
+          982
+        ],
+        [
+          690,
+          85
+        ]
+      ],
+      "id": 229,
+      "parent": 228,
+      "role": "AXGroup",
+      "subrole": ""
+    },
+    {
+      "children": [
+        231
+      ],
+      "childrenComplete": true,
+      "classes": [],
+      "editable": false,
+      "frame": [
+        [
+          742,
+          996
+        ],
+        [
+          661,
+          63
+        ]
+      ],
+      "id": 230,
+      "parent": 229,
+      "role": "AXGroup",
+      "subrole": ""
+    },
+    {
+      "children": [
+        232,
+        233
+      ],
+      "childrenComplete": true,
+      "classes": [],
+      "editable": false,
+      "frame": [
+        [
+          742,
+          996
+        ],
+        [
+          661,
+          63
+        ]
+      ],
+      "id": 231,
+      "parent": 230,
+      "role": "AXGroup",
+      "subrole": ""
+    },
+    {
+      "children": [],
+      "childrenComplete": true,
+      "classes": [],
+      "editable": false,
+      "frame": [
+        [
+          742,
+          996
+        ],
+        [
+          661,
+          63
+        ]
+      ],
+      "id": 232,
+      "parent": 231,
+      "role": "AXTextArea",
+      "subrole": ""
+    },
+    {
+      "children": [
+        234
+      ],
+      "childrenComplete": true,
+      "classes": [],
+      "editable": false,
+      "frame": [
+        [
+          742,
+          996
+        ],
+        [
+          661,
+          63
+        ]
+      ],
+      "id": 233,
+      "parent": 231,
+      "role": "AXGroup",
+      "subrole": ""
+    },
+    {
+      "children": [],
+      "childrenComplete": true,
+      "classes": [],
+      "editable": false,
+      "frame": [
+        [
+          742,
+          998
+        ],
+        [
+          364,
+          15
+        ]
+      ],
+      "id": 234,
+      "parent": 233,
+      "role": "AXStaticText",
+      "subrole": ""
+    },
+    {
+      "children": [
+        236
+      ],
+      "childrenComplete": true,
+      "classes": [],
+      "editable": false,
+      "frame": [
+        [
+          733,
+          1068
+        ],
+        [
+          129,
+          26
+        ]
+      ],
+      "id": 235,
+      "parent": 228,
+      "role": "AXPopUpButton",
+      "subrole": ""
+    },
+    {
+      "children": [
+        237
+      ],
+      "childrenComplete": true,
+      "classes": [],
+      "editable": false,
+      "frame": [
+        [
+          762,
+          1072
+        ],
+        [
+          76,
+          18
+        ]
+      ],
+      "id": 236,
+      "parent": 235,
+      "role": "AXGroup",
+      "subrole": ""
+    },
+    {
+      "children": [],
+      "childrenComplete": true,
+      "classes": [],
+      "editable": false,
+      "frame": [
+        [
+          762,
+          1073
+        ],
+        [
+          76,
+          15
+        ]
+      ],
+      "id": 237,
+      "parent": 236,
+      "role": "AXStaticText",
+      "subrole": ""
+    },
+    {
+      "children": [],
+      "childrenComplete": true,
+      "classes": [],
+      "editable": false,
+      "frame": [
+        [
+          867,
+          1073
+        ],
+        [
+          1,
+          15
+        ]
+      ],
+      "id": 238,
+      "parent": 228,
+      "role": "AXSplitter",
+      "subrole": ""
+    },
+    {
+      "children": [],
+      "childrenComplete": true,
+      "classes": [],
+      "editable": false,
+      "frame": [
+        [
+          873,
+          1068
+        ],
+        [
+          62,
+          26
+        ]
+      ],
+      "id": 239,
+      "parent": 228,
+      "role": "AXPopUpButton",
+      "subrole": ""
+    },
+    {
+      "children": [],
+      "childrenComplete": true,
+      "classes": [],
+      "editable": false,
+      "frame": [
+        [
+          940,
+          1073
+        ],
+        [
+          1,
+          15
+        ]
+      ],
+      "id": 240,
+      "parent": 228,
+      "role": "AXSplitter",
+      "subrole": ""
+    },
+    {
+      "children": [
+        242
+      ],
+      "childrenComplete": true,
+      "classes": [],
+      "editable": false,
+      "frame": [
+        [
+          946,
+          1068
+        ],
+        [
+          119,
+          26
+        ]
+      ],
+      "id": 241,
+      "parent": 228,
+      "role": "AXComboBox",
+      "subrole": ""
+    },
+    {
+      "children": [],
+      "childrenComplete": true,
+      "classes": [],
+      "editable": false,
+      "frame": [
+        [
+          975,
+          1073
+        ],
+        [
+          67,
+          15
+        ]
+      ],
+      "id": 242,
+      "parent": 241,
+      "role": "AXStaticText",
+      "subrole": ""
+    },
+    {
+      "children": [],
+      "childrenComplete": true,
+      "classes": [],
+      "editable": false,
+      "frame": [
+        [
+          1341,
+          1068
+        ],
+        [
+          26,
+          26
+        ]
+      ],
+      "id": 243,
+      "parent": 228,
+      "role": "AXButton",
+      "subrole": ""
+    },
+    {
+      "children": [],
+      "childrenComplete": true,
+      "classes": [],
+      "editable": false,
+      "frame": [
+        [
+          1374,
+          1066
+        ],
+        [
+          29,
+          29
+        ]
+      ],
+      "id": 244,
+      "parent": 228,
+      "role": "AXButton",
+      "subrole": ""
+    },
+    {
+      "children": [
+        246
+      ],
+      "childrenComplete": true,
+      "classes": [],
+      "editable": false,
+      "frame": [
+        [
+          727,
+          1096
+        ],
+        [
+          691,
+          43
+        ]
+      ],
+      "id": 245,
+      "parent": 223,
+      "role": "AXGroup",
+      "subrole": ""
+    },
+    {
+      "children": [
+        247,
+        248
+      ],
+      "childrenComplete": true,
+      "classes": [
+        "group/composer-context"
+      ],
+      "editable": false,
+      "frame": [
+        [
+          746,
+          1096
+        ],
+        [
+          652,
+          43
+        ]
+      ],
+      "id": 246,
+      "parent": 245,
+      "role": "AXGroup",
+      "subrole": ""
+    },
+    {
+      "children": [],
+      "childrenComplete": true,
+      "classes": [],
+      "editable": false,
+      "frame": [
+        [
+          771,
+          1118
+        ],
+        [
+          77,
+          13
+        ]
+      ],
+      "id": 247,
+      "parent": 246,
+      "role": "AXStaticText",
+      "subrole": ""
+    },
+    {
+      "children": [
+        249
+      ],
+      "childrenComplete": true,
+      "classes": [],
+      "editable": false,
+      "frame": [
+        [
+          1331,
+          1114
+        ],
+        [
+          60,
+          22
+        ]
+      ],
+      "id": 248,
+      "parent": 246,
+      "role": "AXComboBox",
+      "subrole": ""
+    },
+    {
+      "children": [],
+      "childrenComplete": true,
+      "classes": [],
+      "editable": false,
+      "frame": [
+        [
+          1349,
+          1118
+        ],
+        [
+          25,
+          13
+        ]
+      ],
+      "id": 249,
+      "parent": 248,
+      "role": "AXStaticText",
+      "subrole": ""
+    }
+  ]
+}

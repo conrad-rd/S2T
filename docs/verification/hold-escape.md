@@ -1,0 +1,11 @@
+# Hold Escape to cancel
+
+Prompt mode and dictation require a continuous 0.6-second Escape hold to cancel. The initial key-down and release pass through to the foreground app, so a quick press still works in menus and editors. The one-shot timer runs in common run-loop modes and does not depend on keyboard repeat settings. A live key-state check prevents a queued release from becoming a cancellation when the main thread was busy.
+
+Quick Escape still cancels a screenshot rectangle, shortcut capture or shortcut test. Continuing to hold after cancelling a rectangle cancels the prompt. Held activation keys remain supported. Escape repeats cannot cancel twice, and releasing an activation key after cancellation cannot finish or deliver the recording. Other key presses, shortcut reset, tap interruption and stopping monitoring invalidate a pending hold. Modified Escape combinations remain available to the system unless the modifier belongs to the held activation key or screenshot selection.
+
+`--verify-onboarding` includes `HoldEscapeProbe`, which uses unposted synthetic events and preview app state. It covers short presses across preparation, recording, transcription and processing; threshold timing; repeat independence; retained transcripts; deferred delivery; Fn and Prompt activation; screenshot selection; modified Escape; idle-to-active transitions; event-tap interruption; and teardown. It never records audio, posts keys, captures pixels, or reads real fields or clipboard content.
+
+The regression was written before the implementation and failed against the previous handler with `A quick Escape must reach the active app during preparing`. Logs are under `build/hold-escape`. Physical keyboard behavior is not verified by these synthetic checks.
+
+Verified canonical `build/S2T.app`, version 1.0.1 Build 713, executable SHA256 `1d42e0af00e18393a41e2b893296ff9be3607f5ec2b5a1bde13bea855fe621fe`. All 417 service/domain tests passed. The packaged app passed `--verify-onboarding`, `--verify-prompt-mode`, `--verify-window-shortcuts`, `--verify-menu-highlights` and `--verify-build` while holding the package lock. The shortcut fixture also simulates a physical release whose key-up event has not arrived yet. The running app was preserved.

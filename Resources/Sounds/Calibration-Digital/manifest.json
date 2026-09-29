@@ -1,0 +1,89 @@
+[
+  {
+    "id": "fm-01",
+    "group": "fm",
+    "file": "fm-01.mp3",
+    "prompt": "Purely synthesized digital interface cue. Rounded frequency-modulated oscillator with a narrow filtered noise edge. A sliding pitch curls gently sideways. Dark treble, smooth attack, dry fade. Quiet and intimate, with no acoustic foley, music, or voice. Two close, soft pulses and one delayed longer pitch curl.",
+    "source": "fm-01.source.mp3"
+  },
+  {
+    "id": "fm-02",
+    "group": "fm",
+    "file": "fm-02.mp3",
+    "prompt": "Purely synthesized digital interface cue. Rounded frequency-modulated oscillator with a narrow filtered noise edge. A sliding pitch curls gently sideways. Dark treble, smooth attack, dry fade. Quiet and intimate, with no acoustic foley, music, or voice. A quiet first pulse, a short pause, then two overlapping pitch bends.",
+    "source": "fm-02.source.mp3"
+  },
+  {
+    "id": "fm-03",
+    "group": "fm",
+    "file": "fm-03.mp3",
+    "prompt": "Purely synthesized digital interface cue. Rounded frequency-modulated oscillator with a narrow filtered noise edge. A sliding pitch curls gently sideways. Dark treble, smooth attack, dry fade. Quiet and intimate, with no acoustic foley, music, or voice. Three uneven micro-pulses that speed up slightly and fade.",
+    "source": "fm-03.source.mp3"
+  },
+  {
+    "id": "grain-01",
+    "group": "grain",
+    "file": "grain-01.mp3",
+    "prompt": "Purely electronic interface cue. A small cloud of smooth granular synth particles follows a curved pitch glide. Short grains overlap in an uneven rhythm but never click sharply. Soft, dark, dry, quiet. No acoustic foley, ambience, music, or voice. Two close, soft pulses and one delayed longer pitch curl.",
+    "source": "grain-01.source.mp3"
+  },
+  {
+    "id": "grain-02",
+    "group": "grain",
+    "file": "grain-02.mp3",
+    "prompt": "Purely electronic interface cue. A small cloud of smooth granular synth particles follows a curved pitch glide. Short grains overlap in an uneven rhythm but never click sharply. Soft, dark, dry, quiet. No acoustic foley, ambience, music, or voice. A quiet first pulse, a short pause, then two overlapping pitch bends.",
+    "source": "grain-02.source.mp3"
+  },
+  {
+    "id": "grain-03",
+    "group": "grain",
+    "file": "grain-03.mp3",
+    "prompt": "Purely electronic interface cue. A small cloud of smooth granular synth particles follows a curved pitch glide. Short grains overlap in an uneven rhythm but never click sharply. Soft, dark, dry, quiet. No acoustic foley, ambience, music, or voice. Three uneven micro-pulses that speed up slightly and fade.",
+    "source": "grain-03.source.mp3"
+  },
+  {
+    "id": "coupled-01",
+    "group": "coupled",
+    "file": "coupled-01.mp3",
+    "prompt": "Purely synthesized interface cue. Two softly coupled oscillators beat and bend against each other, making a rounded elastic digital motion. A faint filtered noise breath sits behind the tone. Staggered, restrained, dry, quiet. No acoustic foley, music, or voice. Two close, soft pulses and one delayed longer pitch curl.",
+    "source": "coupled-01.source.mp3"
+  },
+  {
+    "id": "coupled-02",
+    "group": "coupled",
+    "file": "coupled-02.mp3",
+    "prompt": "Purely synthesized interface cue. Two softly coupled oscillators beat and bend against each other, making a rounded elastic digital motion. A faint filtered noise breath sits behind the tone. Staggered, restrained, dry, quiet. No acoustic foley, music, or voice. A quiet first pulse, a short pause, then two overlapping pitch bends.",
+    "source": "coupled-02.source.mp3"
+  },
+  {
+    "id": "coupled-03",
+    "group": "coupled",
+    "file": "coupled-03.mp3",
+    "prompt": "Purely synthesized interface cue. Two softly coupled oscillators beat and bend against each other, making a rounded elastic digital motion. A faint filtered noise breath sits behind the tone. Staggered, restrained, dry, quiet. No acoustic foley, music, or voice. Three uneven micro-pulses that speed up slightly and fade.",
+    "source": "coupled-03.source.mp3"
+  },
+  {
+    "id": "synth-01",
+    "group": "synth",
+    "file": "synth-01-soft.mp3",
+    "prompt": "Deterministic FM synth with three uneven filtered pulses"
+  },
+  {
+    "id": "synth-02",
+    "group": "synth",
+    "file": "synth-02-soft.mp3",
+    "prompt": "Deterministic FM synth with three uneven filtered pulses"
+  },
+  {
+    "id": "synth-03",
+    "group": "synth",
+    "file": "synth-03-soft.mp3",
+    "prompt": "Deterministic FM synth with three uneven filtered pulses"
+  },
+  {
+    "id": "synth-04",
+    "group": "synth",
+    "file": "synth-04-soft.mp3",
+    "prompt": "Deterministic FM synth with three uneven filtered pulses"
+  }
+]

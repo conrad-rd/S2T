@@ -4,19 +4,20 @@ import SwiftUI
 import S2TCore
 
 enum AppearanceSection: Int, CaseIterable {
-    case glow, edge, speech
-    var title: String { ["Glow", "Edge", "Speech"][rawValue] }
+    case glow, edge, speech, gradient
+    var title: String { ["Glow", "Edge", "Speech", "Gradient"][rawValue] }
     var controls: [AppearanceControl] {
         switch self {
-        case .glow: return [.intensity, .gradientSpeed, .width, .backgroundBlur, .bodyOpacity, .softness, .falloff]
+        case .glow: return [.intensity, .width, .backgroundBlur, .bodyOpacity, .softness, .falloff, .inputMinimumSize, .inputMaximumSize]
         case .edge: return [.edgeBlur, .edgeGlow, .edge, .edgeHeight, .edgeOpacity]
         case .speech: return [.minimum, .maximum]
+        case .gradient: return [.gradientSpeed]
         }
     }
 }
 
 enum AppearanceControl: String, CaseIterable {
-    case intensity, gradientSpeed, width, backgroundBlur, bodyOpacity, softness, falloff, edge, edgeBlur, edgeGlow, edgeHeight, edgeOpacity, minimum, maximum
+    case inputMinimumSize, inputMaximumSize, intensity, gradientSpeed, width, backgroundBlur, bodyOpacity, softness, falloff, edge, edgeBlur, edgeGlow, edgeHeight, edgeOpacity, minimum, maximum
     var section: AppearanceSection { AppearanceSection.allCases.first { $0.controls.contains(self) }! }
     var id: String { "glow." + rawValue }
     var title: String {
@@ -27,6 +28,8 @@ enum AppearanceControl: String, CaseIterable {
         case .backgroundBlur: return "Background blur"
         case .bodyOpacity: return "Main glow opacity"
         case .softness: return "Glow softness"
+        case .inputMinimumSize: return "Minimum size"
+        case .inputMaximumSize: return "Maximum size"
         case .falloff: return "Falloff"
         case .edge: return "Edge brightness"
         case .edgeBlur: return "Edge blur"
@@ -55,6 +58,7 @@ enum AppearanceControl: String, CaseIterable {
         case .backgroundBlur: return "square.3.layers.3d"
         case .bodyOpacity: return "circle.lefthalf.filled"
         case .softness: return "drop.halffull"
+        case .inputMinimumSize, .inputMaximumSize: return "arrow.up.and.down"
         case .falloff: return "circle.dotted"
         case .edge: return "circle.lefthalf.filled"
         case .edgeBlur: return "drop.halffull"
@@ -71,6 +75,7 @@ enum AppearanceControl: String, CaseIterable {
         case .intensity: return 0.25...1.3
         case .width: return 0.25...1
         case .softness, .edgeBlur: return 0...12
+        case .inputMinimumSize, .inputMaximumSize: return 0.5...2
         case .falloff: return 0.5...2
         case .edgeHeight: return 0...1
         case .edgeOpacity, .bodyOpacity: return 0...1
@@ -84,6 +89,8 @@ enum AppearanceControl: String, CaseIterable {
         case .backgroundBlur: return "Softens the background through the native progressive blur. Zero keeps it sharp."
         case .bodyOpacity: return "Changes the main glow's transparency without changing the light sweep or background blur."
         case .softness: return "Softens the colored glow while keeping the edge crisp."
+        case .inputMinimumSize: return "Glow size for small text boxes. Keeps a visible tail. Preview shows the maximum."
+        case .inputMaximumSize: return "Glow size for large text boxes. Preview always shows this size."
         case .falloff: return "Higher values fade the glow faster. Lower values leave a longer tail."
         case .edge: return "Changes the light level of the rim and its halo."
         case .edgeBlur: return "Softens only the bright rim."
@@ -96,7 +103,8 @@ enum AppearanceControl: String, CaseIterable {
         }
     }
     func isVisible(for mode: GlowAppearance) -> Bool {
-        mode != .bezel && (self != .width || mode == .bottom || mode == .aroundNotch)
+        if self == .inputMinimumSize || self == .inputMaximumSize { return mode == .withinInput }
+        return mode != .bezel && mode != .liquidGlass && (self != .width || mode == .bottom || mode == .aroundNotch)
     }
     func formatted(_ value: Double) -> String {
         if self == .gradientSpeed { return value == 0 ? "0 · Off" : String(format: "%.2f cycles/s", value) }
@@ -110,6 +118,8 @@ enum AppearanceControl: String, CaseIterable {
         case .backgroundBlur: return state.glowTuning.backgroundBlur
         case .bodyOpacity: return state.glowTuning.bodyOpacity
         case .softness: return state.glowTuning.softness
+        case .inputMinimumSize: return state.glowTuning.inputMinimumSize
+        case .inputMaximumSize: return state.glowTuning.inputMaximumSize
         case .falloff: return state.glowTuning.falloff
         case .edge: return state.glowTuning.edgeBrightness
         case .edgeBlur: return state.glowTuning.edgeBlur
@@ -129,6 +139,12 @@ enum AppearanceControl: String, CaseIterable {
         case .backgroundBlur: state.glowTuning.backgroundBlur = value
         case .bodyOpacity: state.glowTuning.bodyOpacity = value
         case .softness: state.glowTuning.softness = value
+        case .inputMinimumSize:
+            state.glowTuning.inputMinimumSize = value
+            state.glowTuning.inputMaximumSize = max(value, state.glowTuning.inputMaximumSize)
+        case .inputMaximumSize:
+            state.glowTuning.inputMaximumSize = value
+            state.glowTuning.inputMinimumSize = min(value, state.glowTuning.inputMinimumSize)
         case .falloff: state.glowTuning.falloff = value
         case .edge: state.glowTuning.edgeBrightness = value
         case .edgeBlur: state.glowTuning.edgeBlur = value
@@ -145,83 +161,192 @@ enum AppearanceControl: String, CaseIterable {
     }
 }
 
+/// A single selection drives navigation; pages keep their editors alive while hidden.
+private enum SettingsDestination: String {
+    case appearance, dashboard, dictation, models, keys, writing, meetings, recent
+}
+
 @MainActor final class AppearanceWindowController: NSObject, NSWindowDelegate {
+    static let contentSize = NSSize(width: 780, height: 720)
     let state: AppState
-    let preview = AppearancePreviewActivity()
+    let preview: AppearancePreviewActivity
+    let modeBar = AppearanceModeBar()
+    let pageToolbar = SettingsPageToolbar()
     private(set) var window: NSWindow?
     private(set) var sliders: [AppearanceControl: NSSlider] = [:]
     private var values: [AppearanceControl: NSTextField] = [:]
     private var rows: [AppearanceControl: NSView] = [:]
     private(set) var sidebar = AppearanceSidebarController()
     private(set) var splitController = NSSplitViewController()
+    private(set) var windowSurface: SettingsWindowSurface!
     private(set) var previewHost: NSView?
     private(set) var sidePicker = BezelPlacementPicker(frame: .zero)
-    let phasePicker = AppearancePhasePicker(frame: .zero)
     let sectionBar = AppearanceSectionBar(frame: .zero)
+    private let fixedPreviewHint = NSTextField(labelWithString: "Drag the indicator to an edge")
     private(set) var selectedSection = AppearanceSection.glow
-    private var speechPreviewPhase = 1
     private var sectionCards: [AppearanceSection: NSView] = [:]
     private(set) var controlsScroll = NSScrollView()
     private(set) var controlsPanel: NSView!
+    private(set) var adjustments = NSView()
     private var panelHeight: NSLayoutConstraint!
-    private var panelWidth: NSLayoutConstraint!
+    private(set) var classicBarAvoidance: ClassicBarAvoidance?
     private var sideGroup = NSView()
+    let gradientEditor = GradientEditor()
+    private var gradientCard = NSView()
     private var inputHelp = NSTextField(wrappingLabelWithString: "")
+    private(set) var inputSizeToggle = NSSwitch()
+    private(set) var inputSizeRow: NSStackView = AppearanceSettingRow()
     private var reset = NSButton()
-    private(set) lazy var modelsPane = ModelsPane(state: state)
-    private(set) var showingModels = false
-    private(set) var showingKeys = false
+    private(set) lazy var modelsPane: ModelsPane = {
+        let pane = ModelsPane(state: state)
+        pane.openAPIKeys = { [weak self] account in
+            self?.showAPIKeys()
+            self?.apiKeysPane.editing.beginEditing(account)
+        }
+        return pane
+    }()
+    var showingRecentRecordings: Bool { destination == .recent }
+    let recentFilter = RecentRecordingsFilter()
+    private(set) lazy var recentRecordingsPane: NSHostingView<RecentRecordingsView> = {
+        let host = NSHostingView(rootView: RecentRecordingsView(history: state.recentRecordings,
+            filter: recentFilter, copy: { [weak state] text in state?.copyText(text) }))
+        host.sizingOptions = []
+        return host
+    }()
+    var showingDashboard: Bool { destination == .dashboard }
+    private(set) lazy var dashboardPane = DashboardPane(ledger: state.localUsage, state: state)
+    var showingModels: Bool { destination == .models }
+    var showingKeys: Bool { destination == .keys }
+    var showingMeetings: Bool { destination == .meetings }
+    private(set) lazy var meetingsPane = MeetingsPane(state: state)
+    var showingWriting: Bool { destination == .writing }
+    private(set) lazy var writingPane = WritingPane(state: state)
     private(set) lazy var apiKeysPane = APIKeysPane(state: state)
+    var showingDictation: Bool { destination == .dictation }
+    private(set) lazy var dictationPane: NSHostingView<DictationSettingsPane> = {
+        let host = NSHostingView(rootView: DictationSettingsPane(
+            state: state, inputs: state.inputs, navigation: dictationNavigation,
+            openAPIKeys: { [weak self] in self?.showAPIKeys() },
+            openRecent: { [weak self] in self?.showRecentRecordings() }))
+        host.sizingOptions = []
+        return host
+    }()
+    let dictationNavigation = DictationNavigation()
+    private var destination = SettingsDestination.appearance
     private var appearanceDetail: NSView?
     private var subscription: AnyCancellable?
+    private var modelsSubscription: AnyCancellable?
+    private var meetingsSubscription: AnyCancellable?
+    private var recentSubscription: AnyCancellable?
+    private var dictationSubscription: AnyCancellable?
     private let presentsWindows: Bool
+    private var refreshScheduled = false
+    private var refreshing = false
+    private var refreshedGradient: GlowGradient?
+    private var refreshedGradientMode: GlowAppearance?
+    private struct LayoutState: Equatable {
+        let mode: GlowAppearance
+        let section: AppearanceSection
+        let destination: SettingsDestination
+        let theme: String
+        let side: BezelSide
+        let inputSize: Bool
+        let notice: String?
+    }
+    private var refreshedLayout: LayoutState?
 
     init(state: AppState, presentsWindows: Bool = true) {
         self.state = state
+        self.preview = AppearancePreviewActivity(mode: state.glowAppearance)
         self.presentsWindows = presentsWindows && !state.isPreview
         super.init()
         subscription = state.objectWillChange.sink { [weak self] in
-            DispatchQueue.main.async { [weak self] in self?.refresh() }
+            guard let self, !self.refreshScheduled, self.window != nil,
+                  !self.presentsWindows || self.window?.isVisible == true else { return }
+            self.refreshScheduled = true
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.refreshScheduled = false
+                self.refresh()
+            }
         }
     }
 
     @discardableResult func prepare() -> NSWindow {
         if let window { refresh(); return window }
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 780, height: 720),
-            styleMask: [.titled, .closable, .miniaturizable, .fullSizeContentView], backing: .buffered, defer: true)
-        window.title = "S2T Settings"
-        window.titleVisibility = .hidden
+        let window = SettingsEditorWindow(contentRect: NSRect(origin: .zero, size: Self.contentSize),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView], backing: .buffered, defer: true)
+        window.title = "Appearance"
+        window.acceptsMouseMovedEvents = true
+        window.titleVisibility = .visible
         window.titlebarAppearsTransparent = true
         window.identifier = NSUserInterfaceItemIdentifier("s2t.appearance")
         window.isReleasedWhenClosed = false
         window.titlebarSeparatorStyle = .none
         window.delegate = self
+        window.cancelFieldEditing = { [weak self] in
+            guard let self, self.showingKeys else { return }
+            self.apiKeysPane.editing.endEditing(commit: false)
+        }
+        window.contentMinSize = Self.contentSize
+        window.collectionBehavior.insert(.fullScreenNone)
 
         let detail = NSViewController()
-        let content = AppearanceDetailView()
+        let content = NSView()
         detail.view = content
         appearanceDetail = content
-        sidebar.onSelection = { [weak self] mode in
+        sidebar.onAppearance = { [weak self] in
             guard let self else { return }
             self.setModelsVisible(false)
-            self.state.glowAppearance = mode
             self.refresh()
             self.scrollControlsToTop()
         }
-        sidebar.onAPIKeys = { [weak self] in self?.setSettingsPane("keys") }
+        sidebar.onRecentRecordings = { [weak self] in self?.setSettingsPane(.recent) }
+        sidebar.onDashboard = { [weak self] in self?.setSettingsPane(.dashboard) }
+        sidebar.onAPIKeys = { [weak self] in self?.setSettingsPane(.keys) }
         sidebar.onModels = { [weak self] in self?.setModelsVisible(true) }
-        let sidebarItem = NSSplitViewItem(sidebarWithViewController: sidebar)
-        sidebarItem.minimumThickness = 208
-        sidebarItem.maximumThickness = 208
+        sidebar.onWriting = { [weak self] in self?.setSettingsPane(.writing) }
+        sidebar.onMeetings = { [weak self] in self?.setSettingsPane(.meetings) }
+        sidebar.onDictation = { [weak self] in
+            self?.dictationNavigation.page = nil
+            self?.setSettingsPane(.dictation)
+        }
+        splitController.splitView = SettingsSplitView()
+        splitController.splitView.isVertical = true
+        // The inset rail supplies its own glass. Native sidebar behavior adds a
+        // second full-height material and splits the window's titlebar background
+        // at this boundary. A regular item keeps one continuous native titlebar.
+        let sidebarItem = NSSplitViewItem(viewController: sidebar)
+        sidebarItem.minimumThickness = AppearanceSidebarController.containerWidth
+        sidebarItem.maximumThickness = AppearanceSidebarController.containerWidth
         sidebarItem.canCollapse = false
         sidebarItem.allowsFullHeightLayout = true
         splitController.addSplitViewItem(sidebarItem)
         let detailItem = NSSplitViewItem(viewController: detail)
         detailItem.minimumThickness = 572
+        detailItem.allowsFullHeightLayout = true
         splitController.addSplitViewItem(detailItem)
         splitController.splitView.dividerStyle = .thin
-        window.contentViewController = splitController
-        window.setContentSize(NSSize(width: 780, height: 720))
+        windowSurface = SettingsWindowSurface(split: splitController)
+        window.contentViewController = windowSurface
+        pageToolbar.owner = self
+        window.toolbar = pageToolbar.toolbar
+        window.toolbarStyle = .unified
+        windowSurface.alignTitlebar(in: window)
+        modelsSubscription = modelsPane.navigation.objectWillChange.sink { [weak self] in
+            DispatchQueue.main.async { [weak self] in self?.pageToolbar.refresh() }
+        }
+        meetingsSubscription = state.meetings.objectWillChange.sink { [weak self] in
+            DispatchQueue.main.async { [weak self] in self?.pageToolbar.refresh() }
+        }
+        dictationSubscription = dictationNavigation.objectWillChange.sink { [weak self] in
+            DispatchQueue.main.async { [weak self] in self?.pageToolbar.refresh() }
+        }
+        recentSubscription = state.recentRecordings.objectWillChange.sink { [weak self] in
+            DispatchQueue.main.async { [weak self] in self?.pageToolbar.refresh() }
+        }
+        window.setContentSize(Self.contentSize)
+        window.contentView?.layoutSubtreeIfNeeded()
 
         reset = NSButton(title: "Reset", target: self, action: #selector(resetGlow))
         reset.attributedTitle = NSAttributedString(string: "Reset", attributes: [
@@ -256,33 +381,52 @@ enum AppearanceControl: String, CaseIterable {
             host.bottomAnchor.constraint(equalTo: content.bottomAnchor)
         ])
         previewHost = host
-        phasePicker.onSelection = { [weak self] phase in
-            self?.preview.phase = phase
-            self?.refresh()
-        }
+        sidebar.backdrop.previewViewport = host
         let panelContent = NSView()
-        controlsPanel = SettingsGlassBar.make(content: panelContent, cornerRadius: 36)
+        controlsPanel = SettingsGlassBar.make(content: panelContent, cornerRadius: 30)
         controlsPanel.identifier = NSUserInterfaceItemIdentifier("appearance.controlsPanel")
         controlsPanel.translatesAutoresizingMaskIntoConstraints = false
         content.addSubview(controlsPanel)
-        panelHeight = controlsPanel.heightAnchor.constraint(equalToConstant: 392)
-        panelWidth = controlsPanel.widthAnchor.constraint(equalToConstant: 476)
+        panelHeight = controlsPanel.heightAnchor.constraint(equalToConstant: 340)
+        let horizontal = controlsPanel.centerXAnchor.constraint(equalTo: host.centerXAnchor)
+        let vertical = controlsPanel.topAnchor.constraint(equalTo: content.bottomAnchor, constant: -AppearancePreviewScene.controlsReserve)
+        classicBarAvoidance = ClassicBarAvoidance(panel: controlsPanel, horizontal: horizontal, vertical: vertical, height: panelHeight)
+        preview.onClassicPlacement = { [weak self] source, rect, side in
+            guard let self, self.preview.mode.isClassic else { return }
+            self.classicBarAvoidance?.update(obstacle: rect, in: source, side: side)
+        }
         NSLayoutConstraint.activate([
-            controlsPanel.centerXAnchor.constraint(equalTo: host.centerXAnchor),
-            controlsPanel.bottomAnchor.constraint(equalTo: host.bottomAnchor, constant: -24),
-            panelWidth,
+            horizontal,
+            vertical,
+            controlsPanel.widthAnchor.constraint(equalToConstant: 500),
             panelHeight
         ])
-        let previewBar = NSStackView(views: [phasePicker, NSView(), sectionBar])
-        previewBar.distribution = .fill
-        previewBar.spacing = 8
+        modeBar.onSelection = { [weak self] mode in self?.selectPreview(mode) }
+        fixedPreviewHint.font = .systemFont(ofSize: 12)
+        fixedPreviewHint.textColor = .secondaryLabelColor
+        fixedPreviewHint.alignment = .right
+        fixedPreviewHint.isHidden = true
+        let previewBar = NSStackView(views: [modeBar, sectionBar, fixedPreviewHint])
+        previewBar.orientation = .horizontal
+        previewBar.alignment = .centerY
+        previewBar.spacing = 59
         previewBar.translatesAutoresizingMaskIntoConstraints = false
         panelContent.addSubview(previewBar)
+        adjustments.translatesAutoresizingMaskIntoConstraints = false
+        panelContent.addSubview(adjustments)
         NSLayoutConstraint.activate([
-            previewBar.leadingAnchor.constraint(equalTo: panelContent.leadingAnchor, constant: 12),
-            previewBar.trailingAnchor.constraint(equalTo: panelContent.trailingAnchor, constant: -12),
-            previewBar.topAnchor.constraint(equalTo: panelContent.topAnchor, constant: 12),
-            previewBar.heightAnchor.constraint(equalToConstant: 48)
+            previewBar.leadingAnchor.constraint(equalTo: panelContent.leadingAnchor, constant: 9),
+            previewBar.trailingAnchor.constraint(equalTo: panelContent.trailingAnchor, constant: -9),
+            previewBar.topAnchor.constraint(equalTo: panelContent.topAnchor, constant: 9),
+            previewBar.heightAnchor.constraint(equalToConstant: 42),
+            modeBar.widthAnchor.constraint(equalToConstant: 228),
+            modeBar.heightAnchor.constraint(equalToConstant: 42),
+            modeBar.heightAnchor.constraint(equalToConstant: 42),
+            fixedPreviewHint.widthAnchor.constraint(equalToConstant: 195),
+            adjustments.leadingAnchor.constraint(equalTo: panelContent.leadingAnchor),
+            adjustments.trailingAnchor.constraint(equalTo: panelContent.trailingAnchor),
+            adjustments.topAnchor.constraint(equalTo: previewBar.bottomAnchor, constant: 8),
+            adjustments.heightAnchor.constraint(equalToConstant: 281)
         ])
         sectionBar.onSelection = { [weak self] section in self?.selectSection(section) }
 
@@ -290,17 +434,17 @@ enum AppearanceControl: String, CaseIterable {
         controlsScroll.hasVerticalScroller = true
         controlsScroll.autohidesScrollers = true
         controlsScroll.translatesAutoresizingMaskIntoConstraints = false
-        panelContent.addSubview(controlsScroll)
+        adjustments.addSubview(controlsScroll)
         reset.translatesAutoresizingMaskIntoConstraints = false
         reset.controlSize = .regular
-        panelContent.addSubview(reset)
+        adjustments.addSubview(reset)
         NSLayoutConstraint.activate([
-            controlsScroll.leadingAnchor.constraint(equalTo: panelContent.leadingAnchor, constant: 12),
-            controlsScroll.trailingAnchor.constraint(equalTo: panelContent.trailingAnchor, constant: -12),
-            controlsScroll.topAnchor.constraint(equalTo: previewBar.bottomAnchor, constant: 8),
+            controlsScroll.leadingAnchor.constraint(equalTo: adjustments.leadingAnchor, constant: 12),
+            controlsScroll.trailingAnchor.constraint(equalTo: adjustments.trailingAnchor, constant: -12),
+            controlsScroll.topAnchor.constraint(equalTo: adjustments.topAnchor),
             controlsScroll.bottomAnchor.constraint(equalTo: reset.topAnchor, constant: -8),
-            reset.trailingAnchor.constraint(equalTo: panelContent.trailingAnchor, constant: -20),
-            reset.bottomAnchor.constraint(equalTo: panelContent.bottomAnchor, constant: -20),
+            reset.trailingAnchor.constraint(equalTo: adjustments.trailingAnchor, constant: -20),
+            reset.bottomAnchor.constraint(equalTo: adjustments.bottomAnchor, constant: -20),
             reset.widthAnchor.constraint(equalToConstant: 86),
             reset.heightAnchor.constraint(equalToConstant: 32)
         ])
@@ -351,12 +495,27 @@ enum AppearanceControl: String, CaseIterable {
             row.heightAnchor.constraint(equalToConstant: 38).isActive = true
             sliders[control] = slider; values[control] = value; rows[control] = row
         }
+        let sizeIcon = NSImageView(image: NSImage(systemSymbolName: "arrow.up.left.and.arrow.down.right", accessibilityDescription: nil)!)
+        sizeIcon.symbolConfiguration = .init(pointSize: 12, weight: .regular)
+        sizeIcon.contentTintColor = .secondaryLabelColor
+        sizeIcon.widthAnchor.constraint(equalToConstant: 16).isActive = true
+        let sizeLabel = NSTextField(labelWithString: "Fit glow to text box")
+        sizeLabel.font = .systemFont(ofSize: 13)
+        inputSizeToggle.controlSize = .regular
+        inputSizeToggle.setAccessibilityLabel("Fit glow to text box")
+        for view in [sizeIcon, sizeLabel, NSView(), inputSizeToggle] { inputSizeRow.addArrangedSubview(view) }
+        inputSizeRow.alignment = .centerY
+        inputSizeRow.spacing = 8
+        inputSizeRow.heightAnchor.constraint(equalToConstant: 38).isActive = true
         for section in AppearanceSection.allCases {
-            let group = card(section.controls.compactMap { rows[$0] })
+            let group = card((section == .glow ? [inputSizeRow] : []) + section.controls.compactMap { rows[$0] })
             group.identifier = NSUserInterfaceItemIdentifier("appearance.section.\(section.title.lowercased())")
             sectionCards[section] = group
             append(group)
         }
+        inputSizeToggle.target = self
+        inputSizeToggle.action = #selector(changeInputSize)
+        inputSizeToggle.toolTip = "Adjust glow falloff to the text box size. Preview shows the maximum."
         sidePicker.target = self
         sidePicker.action = #selector(changeSide(_:))
         sidePicker.setAccessibilityLabel("Bezel placement")
@@ -371,10 +530,16 @@ enum AppearanceControl: String, CaseIterable {
         inputHelp.textColor = .secondaryLabelColor
         inputHelp.maximumNumberOfLines = 2
         append(inputHelp)
+        gradientEditor.presentsColorPanel = presentsWindows
+        gradientCard = card([gradientEditor])
+        append(gradientCard)
+        gradientEditor.onChange = { [weak self] gradient in
+            guard let self, self.preview.mode != .bezel && self.preview.mode != .liquidGlass else { return }
+            self.state.glowTuning.gradients[self.preview.mode.rawValue] = gradient
+        }
         self.window = window
         if presentsWindows {
             if !window.setFrameUsingName("S2TSettingsHierarchyWindow") { window.center() }
-            window.setContentSize(NSSize(width: 780, height: 720))
             window.setFrameAutosaveName("S2TSettingsHierarchyWindow")
         }
         refresh()
@@ -419,11 +584,29 @@ enum AppearanceControl: String, CaseIterable {
     }
 
     func show() {
+        let firstPresentation = window == nil
         let window = prepare()
-        preview.running = !showingModels && !showingKeys
+        if firstPresentation {
+            sidebar.table.selectRowIndexes(IndexSet(integer: sidebar.dictationRow), byExtendingSelection: false)
+            setSettingsPane(.dictation)
+        }
+        preview.running = !showingOtherPane
         guard presentsWindows else { return }
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+    }
+    func showRecentRecordings() {
+        _ = prepare()
+        sidebar.table.selectRowIndexes(IndexSet(integer: sidebar.recentRecordingsRow), byExtendingSelection: false)
+        setSettingsPane(.recent)
+        show()
+    }
+
+    func showDashboard() {
+        _ = prepare()
+        sidebar.selectDashboard()
+        setSettingsPane(.dashboard)
+        show()
     }
     func showModels() {
         _ = prepare()
@@ -432,51 +615,136 @@ enum AppearanceControl: String, CaseIterable {
         show()
     }
 
+
     func showAPIKeys() {
         _ = prepare()
         sidebar.table.selectRowIndexes(IndexSet(integer: sidebar.keysRow), byExtendingSelection: false)
-        setSettingsPane("keys")
+        setSettingsPane(.keys)
         show()
     }
 
-    func setModelsVisible(_ visible: Bool) { setSettingsPane(visible ? "models" : nil) }
+    func showMeetings() {
+        _ = prepare()
+        sidebar.table.selectRowIndexes(IndexSet(integer: sidebar.meetingsRow), byExtendingSelection: false)
+        setSettingsPane(.meetings)
+        show()
+    }
 
-    private func setSettingsPane(_ pane: String?) {
-        guard let content = appearanceDetail,
-              showingModels != (pane == "models") || showingKeys != (pane == "keys") else { return }
-        showingModels = pane == "models"
-        showingKeys = pane == "keys"
+    func showWriting() {
+        _ = prepare()
+        sidebar.table.selectRowIndexes(IndexSet(integer: sidebar.writingRow), byExtendingSelection: false)
+        setSettingsPane(.writing)
+        show()
+    }
+
+    func showDictation() {
+        _ = prepare()
+        sidebar.table.selectRowIndexes(IndexSet(integer: sidebar.dictationRow), byExtendingSelection: false)
+        setSettingsPane(.dictation)
+        show()
+    }
+
+    /// Opens Dictation → Prompt mode, where the reason Prompt mode could not start is shown.
+    func showPromptMode() {
+        showDictation()
+        dictationNavigation.page = .prompt
+    }
+
+    func setModelsVisible(_ visible: Bool) {
+        if visible {
+            _ = modelsPane.view
+            modelsPane.navigation.showOverview()
+        }
+        setSettingsPane(visible ? .models : .appearance)
+    }
+
+    private func setSettingsPane(_ next: SettingsDestination) {
+        guard let content = appearanceDetail, destination != next else { return }
+        if showingKeys { apiKeysPane.editing.endEditing() }
+        if showingWriting { writingPane.editing.cancel() }
+        window?.makeFirstResponder(nil)
+        destination = next
+        sidebar.logo.isDashboardSelected = showingDashboard
+        sidebar.pageBackgroundColor = showingDashboard ? DashboardPane.backgroundColor : nil
+        window?.backgroundColor = sidebar.pageBackgroundColor ?? .windowBackgroundColor
+        content.needsDisplay = true
+        sidebar.updateBackground(next == .appearance ? preview.mode : nil)
+        let toolbarPage: SettingsPageToolbar.Page = next == .dashboard ? .dashboard : next == .recent ? .recent : next == .keys ? .keys :
+            next == .models ? .models : next == .meetings ? .meetings : next == .dictation ? .dictation : .appearance
+        window?.title = next == .writing ? "Writing" : next == .dashboard ? "S2T" : toolbarPage.title
+        pageToolbar.select(toolbarPage)
+        // Home keeps an empty native toolbar so AppKit uses the same traffic-light
+        // geometry as every settings page, while its background stays transparent.
+        window?.toolbar = showingWriting ? writingPane.nativeToolbar.toolbar : pageToolbar.toolbar
+        window?.titleVisibility = showingDashboard ? .hidden : .visible
+        window?.titlebarSeparatorStyle = .none
+        updateTitlebar()
+        window?.toolbarStyle = .unified
+        if showingWriting { writingPane.nativeToolbar.refresh() }
         let selected: NSView?
-        if showingModels { selected = modelsPane.view }
+        if showingRecentRecordings { selected = recentRecordingsPane }
+        else if showingDashboard { selected = dashboardPane.view }
+        else if showingModels { selected = modelsPane.view }
         else if showingKeys { selected = apiKeysPane.view }
+        else if showingWriting { selected = writingPane.view }
+        else if showingMeetings { selected = meetingsPane.view }
+        else if showingDictation { selected = dictationPane }
         else { selected = nil }
         if let selected {
+            gradientEditor.endColorEditing()
             preview.stop()
             if selected.superview == nil {
                 selected.translatesAutoresizingMaskIntoConstraints = false
                 content.addSubview(selected)
+                let pageTop = showingDashboard ? content.topAnchor
+                    : (window?.contentLayoutGuide as? NSLayoutGuide)?.topAnchor ?? content.safeAreaLayoutGuide.topAnchor
                 NSLayoutConstraint.activate([
                     selected.leadingAnchor.constraint(equalTo: content.leadingAnchor), selected.trailingAnchor.constraint(equalTo: content.trailingAnchor),
-                    selected.topAnchor.constraint(equalTo: content.topAnchor), selected.bottomAnchor.constraint(equalTo: content.bottomAnchor)
+                    selected.topAnchor.constraint(equalTo: pageTop),
+                    selected.bottomAnchor.constraint(equalTo: content.bottomAnchor)
                 ])
             }
-            if showingModels { modelsPane.rebuild(); modelsPane.loadCatalog() }
-            else { apiKeysPane.refresh() }
+            if showingDashboard { Task { await dashboardPane.refresh() } }
+            else if showingModels { modelsPane.refreshForPresentation() }
+            else if showingKeys { apiKeysPane.refresh() }
+            else if showingWriting { writingPane.editing.refresh() }
         } else { preview.running = window?.isVisible == true }
         for child in content.subviews {
             if let selected { child.isHidden = child !== selected }
-            else { child.isHidden = child === modelsPane.view || child === apiKeysPane.view }
+            else { child.isHidden = child !== previewHost && child !== controlsPanel }
         }
     }
 
-    func windowWillClose(_ notification: Notification) { preview.stop() }
+    /// Dashboard and Appearance run their page under a clear titlebar. On Appearance the
+    /// title and toolbar buttons follow the preview's own backdrop so they float over it.
+    private func updateTitlebar() {
+        guard let window else { return }
+        let appearancePage = !showingOtherPane
+        let clear = showingDashboard || appearancePage
+        windowSurface.separator.isHidden = clear
+        let titlebar = window.standardWindowButton(.closeButton)?.superview?.superview
+        let name: NSAppearance.Name? = appearancePage ? (AppearancePreviewScene.hasLightTop(preview.mode) ? .aqua : .darkAqua) : nil
+        if titlebar?.appearance?.name != name { titlebar?.appearance = name.flatMap(NSAppearance.init(named:)) }
+    }
+
+    private var showingOtherPane: Bool {
+        showingRecentRecordings || showingDashboard || showingModels || showingKeys || showingWriting || showingMeetings || showingDictation
+    }
+
+    func windowWillClose(_ notification: Notification) { classicBarAvoidance?.reset(); if showingWriting { writingPane.editing.cancel() }; preview.stop(); gradientEditor.endColorEditing() }
+
+    func selectPreview(_ mode: GlowAppearance) {
+        if preview.mode != mode { gradientEditor.endColorEditing() }
+        preview.mode = mode
+        modeBar.select(mode)
+        refresh()
+        scrollControlsToTop()
+    }
 
     func selectSection(_ section: AppearanceSection) {
-        if section != selectedSection {
-            if selectedSection == .speech { speechPreviewPhase = preview.phase }
-            selectedSection = section
-            preview.phase = section == .speech ? speechPreviewPhase : 0
-        }
+        selectedSection = section
+        preview.phase = section == .speech ? 1 : 0
+        if section != .gradient { gradientEditor.endColorEditing() }
         refresh()
         scrollControlsToTop()
     }
@@ -494,34 +762,86 @@ enum AppearanceControl: String, CaseIterable {
     }
 
     func refresh() {
-        guard let window else { return }
-        if !showingModels && !showingKeys { sidebar.select(state.glowAppearance) }
-        sidePicker.selectedSegment = state.bezelSide == .left ? 0 : 1
-        window.appearance = state.menuAppearance == "system" ? nil : NSAppearance(named: state.menuAppearance == "dark" ? .darkAqua : .aqua)
-        for control in AppearanceControl.allCases {
-            sliders[control]?.doubleValue = control.value(in: state)
-            values[control]?.stringValue = control.formatted(control.value(in: state))
-            rows[control]?.isHidden = !control.isVisible(for: state.glowAppearance)
+        guard let window, !refreshing else { return }
+        refreshing = true
+        defer { refreshing = false }
+        pageToolbar.refresh()
+        if let previewHost {
+            let inset = AppearancePreviewScene.topInset(of: previewHost)
+            if preview.topInset != inset { preview.topInset = inset }
         }
-        let bezel = state.glowAppearance == .bezel
-        controlsPanel.isHidden = bezel || showingModels || showingKeys
-        panelHeight.constant = bezel ? 200 : 392
-        panelWidth.constant = bezel ? 444 : 476
-        sideGroup.isHidden = !bezel
-        sectionBar.isHidden = bezel || showingModels || showingKeys
+        sidebar.updateCredits(state.creditBalance, hidden: !state.isProviderVisible("s2t"))
+        for control in AppearanceControl.allCases {
+            let value = control.value(in: state), label = control.formatted(control.value(in: state))
+            if sliders[control]?.doubleValue != value { sliders[control]?.doubleValue = value }
+            if values[control]?.stringValue != label { values[control]?.stringValue = label }
+        }
+        let gradient = state.glowTuning.gradients[preview.mode.rawValue] ?? .init()
+        if refreshedGradient != gradient || refreshedGradientMode != preview.mode {
+            refreshedGradient = gradient; refreshedGradientMode = preview.mode
+            gradientEditor.refresh(gradient, mode: preview.mode)
+        }
+        let layout = LayoutState(mode: preview.mode, section: selectedSection, destination: destination,
+            theme: state.menuAppearance, side: state.bezelSide,
+            inputSize: state.glowTuning.inputSizeEnabled, notice: state.inputOutlineNotice)
+        // Meter, phase and slider values do not rebuild the settings hierarchy.
+        guard layout != refreshedLayout else { return }
+        refreshedLayout = layout
+        let windowBackground = sidebar.pageBackgroundColor ?? .windowBackgroundColor
+        if window.backgroundColor != windowBackground { window.backgroundColor = windowBackground }
+        updateTitlebar()
+        if showingOtherPane { classicBarAvoidance?.reset() }
+        sidebar.updateBackground(showingOtherPane ? nil : preview.mode)
+        if !showingOtherPane { sidebar.selectAppearance() }
+        modeBar.select(preview.mode)
+        modeBar.isHidden = showingOtherPane
+        sidePicker.selectedSegment = state.bezelSide == .left ? 0 : 1
+        let appearanceName: NSAppearance.Name? = state.menuAppearance == "system" ? nil : state.menuAppearance == "dark" ? .darkAqua : .aqua
+        if window.appearance?.name != appearanceName { window.appearance = appearanceName.flatMap(NSAppearance.init(named:)) }
+        for control in AppearanceControl.allCases {
+            rows[control]?.isHidden = !control.isVisible(for: preview.mode)
+        }
+        inputSizeRow.isHidden = preview.mode != .withinInput
+        inputSizeToggle.state = state.glowTuning.inputSizeEnabled ? .on : .off
+        for control in [AppearanceControl.inputMinimumSize, .inputMaximumSize] { sliders[control]?.isEnabled = state.glowTuning.inputSizeEnabled }
+        let bezel = preview.mode == .bezel
+        let fixed = bezel || preview.mode == .liquidGlass
+        gradientEditor.isHidden = fixed || selectedSection != .gradient
+        gradientCard.isHidden = gradientEditor.isHidden
+        controlsPanel.isHidden = showingOtherPane
+        adjustments.isHidden = fixed
+        classicBarAvoidance?.setPresentation(classic: fixed)
+        sideGroup.isHidden = true
+        sectionBar.isHidden = showingOtherPane || fixed
+        fixedPreviewHint.isHidden = showingOtherPane || !fixed
         sectionBar.select(selectedSection)
-        for (section, card) in sectionCards { card.isHidden = bezel || section != selectedSection }
-        reset.isHidden = bezel
-        inputHelp.stringValue = state.inputOutlineNotice ?? "Uses Bottom when a focused input isn't available."
-        inputHelp.isHidden = state.glowAppearance != .aroundInput || state.inputOutlineNotice == nil
-        phasePicker.select(preview.phase, bezel: bezel)
+        for (section, card) in sectionCards { card.isHidden = fixed || section != selectedSection }
+        reset.isHidden = fixed
+        inputHelp.stringValue = state.inputOutlineNotice ?? "Outlines the focused window when an input box cannot be detected."
+        inputHelp.isHidden = !preview.mode.followsInput || state.inputOutlineNotice == nil
         window.contentView?.layoutSubtreeIfNeeded()
+        sidebar.backdrop.refreshGeometry()
+    }
+
+    @objc private func changeInputSize() {
+        state.glowTuning.inputSizeEnabled = inputSizeToggle.state == .on
+        refresh()
     }
 
     @objc private func changeSlider(_ sender: NSSlider) {
         guard let control = AppearanceControl.allCases.first(where: { $0.id == sender.identifier?.rawValue }) else { return }
         control.set(sender.doubleValue, in: state)
-        refresh()
+        if preview.running, preview.mode != .bezel && preview.mode != .liquidGlass {
+            preview.renderer.submit(AppearancePreviewScene.request(state: state, mode: preview.mode, phase: preview.phase,
+                time: Date.timeIntervalSinceReferenceDate,
+                reducedMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
+                backdrop: !NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency))
+        }
+        for control in AppearanceControl.allCases {
+            let value = control.value(in: state), label = control.formatted(control.value(in: state))
+            if sliders[control]?.doubleValue != value { sliders[control]?.doubleValue = value }
+            if values[control]?.stringValue != label { values[control]?.stringValue = label }
+        }
     }
     @objc private func changeSide(_ sender: BezelPlacementPicker) {
         state.bezelSide = sender.selectedSegment == 0 ? .left : .right
@@ -531,7 +851,7 @@ enum AppearanceControl: String, CaseIterable {
         guard let window else { return }
         let alert = NSAlert()
         alert.messageText = "Reset glow settings?"
-        alert.informativeText = "Restores glow, edge and speech response adjustments for all three glow appearances."
+        alert.informativeText = "Restores glow, edge, speech response and custom gradients for all three glow appearances."
         alert.addButton(withTitle: "Reset")
         alert.addButton(withTitle: "Cancel")
         alert.beginSheetModal(for: window) { [weak self] response in
@@ -547,11 +867,11 @@ enum AppearanceControl: String, CaseIterable {
     }
 }
 
-private final class AppearanceDetailView: NSView {
-    override func draw(_ dirtyRect: NSRect) {
-        NSColor.windowBackgroundColor.setFill()
-        dirtyRect.fill()
-    }
+/// The floating rail already has its own edge; leave no split divider beside it.
+private final class SettingsSplitView: NSSplitView {
+    override var dividerThickness: CGFloat { 0 }
+    override var dividerColor: NSColor { .clear }
+    override func drawDivider(in rect: NSRect) {}
 }
 
 private final class AppearanceFlippedView: NSView {

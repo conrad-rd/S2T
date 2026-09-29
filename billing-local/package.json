@@ -5,14 +5,24 @@
   "scripts": {
     "start": "node server.mjs",
     "test": "node --test integration.test.mjs tests/*.test.mjs",
+    "test:release": "node release-check.mjs",
+    "test:guest": "wrangler deploy --dry-run --outdir ../build/cloudflare-bundle && node guest-cloudflare-check.mjs",
     "test:browser": "node browser-check.mjs",
-    "admin": "node admin.mjs"
+    "admin": "node admin.mjs",
+    "test:native": "node native-check.mjs",
+    "start:env": "node --env-file=.env server.mjs",
+    "test:checkout-browser": "node payment-browser-check.mjs",
+    "test:cloudflare": "wrangler deploy --dry-run --outdir ../build/cloudflare-bundle && node cloudflare-check.mjs",
+    "deploy:cloudflare": "wrangler deploy --config wrangler.local.jsonc"
   },
   "engines": {
     "node": ">=22.13"
   },
   "devDependencies": {
-    "playwright": "^1.63.0"
+    "@clerk/testing": "^2.2.36",
+    "miniflare": "^5.20260915.0-alpha",
+    "playwright": "^1.63.0",
+    "wrangler": "^4.132.0"
   },
   "dependencies": {
     "jose": "^6.2.12",

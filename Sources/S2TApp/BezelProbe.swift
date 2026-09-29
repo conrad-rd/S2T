@@ -7,6 +7,9 @@ import S2TCore
         try Microphone.verifySpectrumCapture()
         try verifyRadiusMaps()
         try verifyDrawnShadow()
+        try verifyDragRendering()
+        measureDragRendering()
+        try verifyDockingContours()
         try BezelRenderingProbe.run()
         let spectrumView = BezelIndicatorView(frame: CGRect(origin: .zero, size: BezelGeometry.size))
         for index in 0...20 {
@@ -45,7 +48,7 @@ import S2TCore
         controls.window?.close()
         for (phase, waiting, hint, symbol) in [
             (DictationPhase.recording, false, nil as String?, BezelSymbol.waveform),
-            (.monitoring, false, nil, .waveform), (.preparing, false, nil, .spinner),
+            (.monitoring, false, nil, .waveform), (.preparing, false, nil, .waveform),
             (.transcribing, false, nil, .spinner), (.processing, false, nil, .spinner),
             (.complete, true, nil, .spinner), (.complete, false, nil, .checkmark),
             (.complete, false, "Allow Accessibility", .failure), (.failed, false, nil, .failure)
@@ -151,6 +154,109 @@ import S2TCore
                 }
             }
         }
+    }
+
+    private static func measureDragRendering() {
+        let size = BezelGeometry.size
+        let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 400, pixelsHigh: 760,
+            bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+            colorSpaceName: .deviceRGB, bytesPerRow: 1600, bitsPerPixel: 32)!
+        let graphics = NSGraphicsContext(bitmapImageRep: bitmap)!
+        let view = BezelIndicatorView(frame: CGRect(origin: .zero, size: size))
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = graphics
+        graphics.cgContext.translateBy(x: 0, y: 760)
+        graphics.cgContext.scaleBy(x: 2, y: -2)
+        defer { NSGraphicsContext.restoreGraphicsState() }
+        for moving in [false, true] {
+            var times: [Double] = []
+            for index in 0..<90 {
+                let t = Double(index) / 60
+                let velocity = moving ? CGVector(dx: 850 * cos(t), dy: 850 * sin(t)) : .zero
+                view.dragVelocity = velocity
+                view.previewShape = BezelDragShape.make(velocity: velocity)
+                view.update(form: .shown, symbol: .waveform, level: 0.6,
+                    spectrum: (0..<7).map { 0.5 + 0.3 * sin(t * 4 + Double($0)) }, time: t, reducedMotion: false)
+                let start = CACurrentMediaTime()
+                view.draw(view.bounds)
+                times.append((CACurrentMediaTime() - start) * 1000)
+            }
+            times.sort()
+            print("Drag render \(moving ? "moving" : "still") ms: median \(times[45]), p95 \(times[85]), max \(times.last!)")
+        }
+    }
+
+    private static func verifyDockingContours() throws {
+        for side in BezelSide.allCases {
+            for distance in [32.0, 55, 78] {
+                let source = BezelDragShape.make(velocity: .zero, side: side, distance: distance)
+                let attached = BezelGeometry.shape(form: .shown, side: side)
+                let edge = 100 + (side == .left ? -distance : distance)
+                let shift = edge - (side == .left ? 0 : BezelGeometry.size.width)
+                var transform = CGAffineTransform(translationX: shift, y: 0)
+                let target = BezelShape(path: attached.path.copy(using: &transform)!,
+                    symbolCenter: attached.symbolCenter.applying(transform))
+                for step in 0...24 {
+                    let t = Double(step) / 24
+                    let shape = BezelDragShape.morph(source, into: target, amount: t)
+                    let bounds = shape.path.boundingBoxOfPath
+                    let expectedWidth = source.path.boundingBoxOfPath.width * (1 - t) + target.path.boundingBoxOfPath.width * t
+                    guard abs((side == .left ? bounds.minX : bounds.maxX) - edge) < 0.01,
+                          abs(bounds.width - expectedWidth) < 0.01,
+                          shape.path.contains(shape.symbolCenter) else { throw failure("Docking contour twisted, collapsed or detached from its edge") }
+                }
+                guard BezelDragShape.morph(source, into: target, amount: 0).path == source.path,
+                      BezelDragShape.morph(source, into: target, amount: 1).path == target.path else { throw failure("Docking endpoints changed") }
+            }
+        }
+        print("PASS: 150 generated docking contours retain edge contact, continuous width and enclosed symbols with exact endpoints.")
+    }
+
+    private static func verifyDragRendering() throws {
+        for side in BezelSide.allCases {
+            for distance in [32.0, 55, 78, 93] {
+                let shape = BezelDragShape.make(velocity: .zero, side: side, distance: distance)
+                let edge = 100 + (side == .left ? -distance : distance)
+                let box = shape.path.boundingBoxOfPath
+                guard abs((side == .left ? box.minX : box.maxX) - edge) < 0.001,
+                      shape.path.contains(shape.symbolCenter) else { throw failure("Drag neck lost flush edge contact") }
+                if distance == 55 {
+                    let x = edge + (side == .left ? 1 : -1) * 12
+                    guard shape.path.contains(CGPoint(x: x, y: 190)),
+                          !shape.path.contains(CGPoint(x: x, y: 210)) else { throw failure("Drag connector lacks a narrow waist") }
+                }
+            }
+        }
+        func draw(_ velocity: CGVector, reduced: Bool = false) throws -> NSBitmapImageRep {
+            let size = BezelGeometry.size
+            let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(size.width), pixelsHigh: Int(size.height),
+                bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+                colorSpaceName: .deviceRGB, bytesPerRow: Int(size.width) * 4, bitsPerPixel: 32)!
+            let graphics = NSGraphicsContext(bitmapImageRep: bitmap)!
+            let view = BezelIndicatorView(frame: CGRect(origin: .zero, size: size))
+            view.previewShape = BezelDragShape.make(velocity: .zero)
+            view.dragVelocity = velocity
+            view.update(form: .shown, symbol: .checkmark, level: 0, spectrum: Array(repeating: 0, count: 7), time: 0, reducedMotion: reduced)
+            NSGraphicsContext.saveGraphicsState()
+            NSGraphicsContext.current = graphics
+            graphics.cgContext.translateBy(x: 0, y: size.height)
+            graphics.cgContext.scaleBy(x: 1, y: -1)
+            view.draw(view.bounds)
+            NSGraphicsContext.restoreGraphicsState()
+            return bitmap
+        }
+        let still = try draw(.zero), moving = try draw(CGVector(dx: 1000, dy: 0))
+        let reduced = try draw(CGVector(dx: 1000, dy: 0), reduced: true)
+        var spread = 0.0
+        for y in 150..<230 { for x in 55..<145 {
+            let a = still.colorAt(x: x, y: y)!, b = moving.colorAt(x: x, y: y)!
+            let c = reduced.colorAt(x: x, y: y)!
+            guard abs(a.alphaComponent - b.alphaComponent) < 0.01,
+                  abs(a.redComponent - c.redComponent) < 0.01 else { throw failure("Motion blur changed the silhouette or ignored Reduce Motion") }
+            if abs(x - 100) > 12 { spread += b.redComponent - a.redComponent }
+        } }
+        guard spread > 3 else { throw failure("Fast drag did not spread the symbol along its motion") }
+        print("PASS: flush pinched drag neck, generated content motion blur, unchanged silhouette and Reduce Motion.")
     }
 
     private static func verifyDrawnShadow() throws {

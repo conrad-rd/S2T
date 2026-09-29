@@ -21,7 +21,9 @@ import S2TCore
                     response: .init(minimum: 1, maximum: 1))
                 switch geometry {
                 case .bottom: break
-                case let .input(rect, radius, cornerStyle): profile.inputOutline = InputOutlineBackdrop(rect: rect, cornerRadius: radius, cornerStyle: cornerStyle, strength: 1.3)
+        case let .windowBottom(layout): profile.windowBottom = layout
+                case let .withinInput(contour): profile.inputOutline = InputOutlineBackdrop(contour: contour, strength: 1.3, withinInput: true)
+                case let .input(contour): profile.inputOutline = InputOutlineBackdrop(contour: contour, strength: 1.3)
                 case let .notch(layout): profile.topLayout = layout
                 }
                 let request = ChromaFrameRequest(geometry: geometry, size: size, profile: profile, brightness: 1, backdrop: true)

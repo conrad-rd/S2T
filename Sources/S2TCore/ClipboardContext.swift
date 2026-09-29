@@ -48,7 +48,7 @@ public struct ClipboardHistory: Sendable, Codable {
         let recent = entries.filter { date.timeIntervalSince($0.copiedAt) <= Self.retention }
         var selected: [(String, String)] = []
         if wantsKey {
-            let namedProvider = ["openrouter", "cerebras", "elevenlabs", "assemblyai", "openai", "anthropic"].first { query.contains($0) }
+            let namedProvider = ["openrouter", "cerebras", "assemblyai", "openai", "anthropic", "xai", "grok"].first { query.contains($0) }.map { $0 == "grok" ? "xai" : $0 }
             for entry in recent {
                 guard let key = apiKey(in: entry.text) else { continue }
                 if let namedProvider, let keyProvider = key.provider, keyProvider != namedProvider { continue }
@@ -57,7 +57,7 @@ public struct ClipboardHistory: Sendable, Codable {
             }
         }
         if wantsLink && urls(in: transcript).isEmpty {
-            let namedHost = ["github.com", "gitlab.com", "notion.so", "figma.com", "openrouter.ai", "elevenlabs.io"].first {
+            let namedHost = ["github.com", "gitlab.com", "notion.so", "figma.com", "openrouter.ai"].first {
                 query.contains($0) || query.contains(String($0.split(separator: ".")[0]))
             }
             let descriptorPattern = #"\b(?:this|that|the|my|diesen?|den|der|meinen?|include|insert|paste|add|use|check|review|open|visit)\s+([\p{L}0-9.-]+)[ -](?:link|url|website|webseite)\b"#
@@ -97,13 +97,7 @@ public struct ClipboardHistory: Sendable, Codable {
     }
 
     private func apiKey(in text: String) -> (value: String, provider: String?)? {
-        let patterns: [(String, String)] = [
-            ("openrouter", #"sk-or-v1-[A-Za-z0-9_-]{20,}"#),
-            ("cerebras", #"csk-[A-Za-z0-9_-]{20,}"#),
-            ("anthropic", #"sk-ant-[A-Za-z0-9_-]{20,}"#),
-            ("openai", #"sk-(?:proj-)?[A-Za-z0-9_-]{20,}"#)
-        ]
-        for (provider, pattern) in patterns {
+        for (provider, pattern) in APIKeyPatterns.providers {
             if let range = text.range(of: pattern, options: .regularExpression) { return (String(text[range]), provider) }
         }
         if text.range(of: #"^[A-Za-z0-9_-]{20,512}$"#, options: .regularExpression) != nil {
@@ -123,8 +117,18 @@ public struct ClipboardHistory: Sendable, Codable {
     }
 }
 
-public struct ClipboardContext: Sendable {
-    public struct Item: Sendable {
+enum APIKeyPatterns {
+    static let providers: [(String, String)] = [
+        ("xai", #"xai-[A-Za-z0-9_-]{20,}"#),
+        ("openrouter", #"sk-or-v1-[A-Za-z0-9_-]{20,}"#),
+        ("cerebras", #"csk-[A-Za-z0-9_-]{20,}"#),
+        ("anthropic", #"sk-ant-[A-Za-z0-9_-]{20,}"#),
+        ("openai", #"sk-(?:proj-)?[A-Za-z0-9_-]{20,}"#)
+    ]
+}
+
+public struct ClipboardContext: Sendable, Codable {
+    public struct Item: Sendable, Codable {
         public let label: String
         public let value: String
         public let placeholder: String

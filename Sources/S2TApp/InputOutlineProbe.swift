@@ -12,19 +12,21 @@ import S2TCore
         try await verifySpeechLifecycle()
         try InputPresetProbe.run()
         try verifyReader()
+        try verifyClippedEditor()
         try await verifyTransientReadRecovery()
         try verifyComposerReader()
         try verifyComposerSelectControls()
         try verifyGeneralReader()
         try verifyAttachmentReader()
+        try verifyPinnedReader()
         try verifyWindowDiscovery()
-        let state = AppState(preview: true)
+        let state = previewState()
         let saved = state.glowAppearance
         defer { state.glowAppearance = saved }
         let menu = MenuBarController(state: state)
         defer { NSStatusBar.system.removeStatusItem(menu.statusItem) }
         menu.menuNeedsUpdate(menu.menu)
-        try AppearanceWindowProbe.verifyModeControls(state: state, menu: menu)
+        try InputAppearanceActionsProbe.verify(state: state, menu: menu)
         let controller = InputOutlineWindowController(state: state)
         var first: NSPanel?
         for screen in NSScreen.screens {
@@ -71,8 +73,19 @@ import S2TCore
         print("No applications activated, menus opened, or screen pixels captured. Visible appearance and live app compatibility are separate checks.")
     }
 
-    private static func verifyGeneratedColor() throws {
+    private static func previewState() -> AppState {
         let state = AppState(preview: true)
+        state.glowAppearance = .aroundInput
+        state.glowTuning = .init()
+        state.glowMinimum = 0.3
+        state.glowMaximum = 2
+        state.glowWidth = 1
+        state.glowStrength = 0.8
+        return state
+    }
+
+    private static func verifyGeneratedColor() throws {
+        let state = previewState()
         state.phase = .recording
         state.glowStrength = 1
         let layout = InputOutlineLayout()
@@ -88,7 +101,7 @@ import S2TCore
         func alpha(_ x: Int, _ y: Int) -> CGFloat { bitmap.colorAt(x: x, y: y)?.alphaComponent ?? 0 }
         guard alpha(680, 397) > alpha(680, 375), alpha(680, 375) >= alpha(680, 350),
               alpha(680, 397) > 0, alpha(680, 1) == 0, alpha(680, 480) == 0 else {
-            throw failure("Chroma input color must fade outward, clear padding and preserve the interior.")
+            throw failure("Chroma input color must fade outward, clear padding and preserve the interior. Samples: \([397, 375, 350, 1, 480].map { alpha(680, $0) })")
         }
         let shape = InputOutlineBackdrop(rect: layout.outlineRect, cornerRadius: layout.cornerRadius).path
         try GlowFixture.write(ZStack { shape.fill(.white); view }, size: size, name: "input")
@@ -103,7 +116,7 @@ import S2TCore
     }
 
     private static func verifyBackdropTransparency() async throws {
-        let state = AppState(preview: true)
+        let state = previewState()
         let layout = InputOutlineLayout()
         layout.outlineRect = CGRect(x: 116, y: 116, width: 400, height: 64)
         layout.cornerRadius = 32
@@ -116,7 +129,10 @@ import S2TCore
         panel.contentView = root
         panel.orderFrontRegardless()
         defer { panel.orderOut(nil) }
-        try await Task.sleep(nanoseconds: 150_000_000)
+        let preparationDeadline = CACurrentMediaTime() + 2
+        while root.profile?.inputOutline == nil, CACurrentMediaTime() < preparationDeadline {
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
         guard let color = root.subviews.first as? NSHostingView<AnyView>, root.profile?.inputOutline != nil else {
             throw failure("Input outline did not submit its backdrop profile.")
         }
@@ -136,7 +152,7 @@ import S2TCore
     }
 
     private static func verifySpeechLifecycle() async throws {
-        let state = AppState(preview: true)
+        let state = previewState()
         state.phase = .recording
         let layout = InputOutlineLayout()
         layout.outlineRect = CGRect(x: 116, y: 116, width: 400, height: 64)
@@ -258,8 +274,8 @@ import S2TCore
                 }
             }, children: { _ in [] }, fallbackFocus: { _ in nil },
                 hitTest: { _, _ in nil }, enableAccessibility: { _ in })
-            let service = FocusedInputService(reader: reader)
-            let target = await service.read(pid: 2_100_001, anchor: nil)
+            let service = FocusedInputService(reader: reader, measuresPixels: false)
+            let target = await service.read(pid: 2_100_001, anchor: nil).target
             guard attempts == 2, target?.frame == (recovers ? CGRect(origin: point, size: size) : nil) else {
                 throw failure("Transient AX failure must retry once before fallback, without retaining stale geometry.")
             }
@@ -507,6 +523,37 @@ import S2TCore
         print("PASS: attachment controls and labels contribute to the full container through the production metadata reader; no text contents read.")
     }
 
+    private static func verifyPinnedReader() throws {
+        let pid: pid_t = 2_950_000
+        let window = AXUIElementCreateApplication(pid + 1), field = AXUIElementCreateApplication(pid + 2)
+        let other = AXUIElementCreateApplication(pid + 3)
+        var bounds = CGRect(x: 120, y: 180, width: 480, height: 80)
+        var invalid = false
+        let reader = FocusedInputReader(attribute: { node, name in
+            if name == kAXFocusedUIElementAttribute || name == kAXFocusedWindowAttribute { return other }
+            let isField = CFEqual(node, field), isWindow = CFEqual(node, window)
+            guard isField || isWindow else { return nil }
+            let frame = isField ? bounds : CGRect(x: 50, y: 50, width: 800, height: 600)
+            switch name {
+            case kAXRoleAttribute: return (isField ? "AXTextArea" : "AXWindow") as CFString
+            case kAXParentAttribute: return isField ? window : nil
+            case kAXSubroleAttribute: return invalid && isField ? "AXSecureTextField" as CFString : nil
+            case kAXFocusedAttribute: return kCFBooleanFalse
+            case kAXPositionAttribute: var point = frame.origin; return AXValueCreate(.cgPoint, &point)
+            case kAXSizeAttribute: var size = frame.size; return AXValueCreate(.cgSize, &size)
+            default: return nil
+            }
+        }, children: { CFEqual($0, window) ? [field] : [] }, fallbackFocus: { _ in nil }, hitTest: { _, _ in nil },
+            applicationBundleID: { _ in "fixture" }, enableAccessibility: { _ in })
+        let destination = PromptDestination(pid: pid, window: window, field: field, document: nil, tab: nil, selection: nil)
+        guard reader.read(pid: pid, pinned: destination) == bounds else { throw failure("Pinned input followed another window's focus") }
+        bounds = bounds.offsetBy(dx: 37, dy: 18)
+        guard reader.read(pid: pid, pinned: destination) == bounds else { throw failure("Pinned input did not follow its own geometry") }
+        invalid = true
+        guard reader.read(pid: pid, pinned: destination) == nil else { throw failure("Pinned input accepted a secure field") }
+        print("Pinned processing geometry: original field survives unrelated focus, follows movement and rejects secure fields PASS with injected metadata.")
+    }
+
     private static func verifyWindowDiscovery() throws {
         let nodes = [
             ComposerNode(id: 0, role: "AXWindow", frame: CGRect(x: 100, y: 100, width: 1000, height: 800), parent: nil, children: [3, 4]),
@@ -563,6 +610,41 @@ import S2TCore
         print("PASS: missing-focus window search, bounded hit testing, dominant editor selection, cached reads, click redirection, editable-ancestor combo box input, and search-field shape.")
     }
 
+    private static func verifyClippedEditor() throws {
+        let pid: pid_t = 2_955_000
+        let app = AXUIElementCreateApplication(pid)
+        let editor = AXUIElementCreateApplication(pid + 1)
+        let viewport = AXUIElementCreateApplication(pid + 2)
+        let input = CGRect(x: 400, y: 80, width: 400, height: 500)
+        let visible = CGRect(x: 0, y: 100, width: 1200, height: 100)
+        var moves = false, viewportReads = 0
+        let reader = FocusedInputReader(attribute: { node, name in
+            if CFEqual(node, app) { return name == kAXFocusedUIElementAttribute ? editor : nil }
+            let isEditor = CFEqual(node, editor)
+            switch name {
+            case kAXRoleAttribute: return (isEditor ? "AXTextArea" : "AXScrollArea") as CFString
+            case kAXParentAttribute: return isEditor ? viewport : nil
+            case kAXPositionAttribute:
+                var point = isEditor ? input.origin : visible.origin
+                if !isEditor { viewportReads += 1; if moves && viewportReads > 1 { point.y += 5 } }
+                return AXValueCreate(.cgPoint, &point)
+            case kAXSizeAttribute:
+                var size = isEditor ? input.size : visible.size
+                return AXValueCreate(.cgSize, &size)
+            default: return nil
+            }
+        }, children: { CFEqual($0, viewport) ? [editor] : [] }, fallbackFocus: { _ in nil },
+           hitTest: { _, _ in nil }, applicationBundleID: { _ in "test.clipped-editor" }, enableAccessibility: { _ in })
+        try checkClipped(reader.read(pid: pid) == input.intersection(visible), "Clipped editor lost its visible field fallback")
+        moves = true; viewportReads = 0
+        try checkClipped(reader.read(pid: pid) == nil, "Moving viewport kept stale clipped geometry")
+        print("PASS: clipped editor fallback validates both the editor and its viewport without reading text.")
+    }
+
+    private static func checkClipped(_ condition: Bool, _ message: String) throws {
+        if !condition { throw failure(message) }
+    }
+
     static func inspectFocusedInput() async {
         guard let app = NSWorkspace.shared.frontmostApplication,
               app.bundleIdentifier != "com.raycast.macos",
@@ -573,8 +655,26 @@ import S2TCore
         print("Foreground: \(app.localizedName ?? "unknown"). Accessibility permission: \(AXIsProcessTrusted()).")
         guard AXIsProcessTrusted() else { return }
         let pid = app.processIdentifier
-        let frame = await Task.detached { FocusedInputReader().read(pid: pid) }.value
-        if let frame { print("Outline target bounds: \(frame). No text was read.") }
+        let target = await Task.detached { () -> InputOutlineTarget? in
+            let reader = FocusedInputReader()
+            guard let frame = reader.read(pid: pid), let contour = reader.contour else { return nil }
+            print("Target kind: \(reader.targetKind), corners: \(reader.cornerRadius), style: \(reader.cornerStyle), calibration: \(String(describing: reader.usedPreset))")
+            return InputOutlineTarget(frame: frame, contour: contour, kind: reader.targetKind)
+        }.value
+        if let target {
+            print("Outline target bounds: \(target.frame). No text was read.")
+            let screens = NSScreen.screens.map(\.frame)
+            if let converted = target.onScreens(primaryTop: screens.first?.maxY ?? 0, screens: screens) {
+                let state = previewState()
+                let controller = InputOutlineWindowController(state: state)
+                let panel = controller.prepare(target: converted)
+                if let contour = (panel.contentView as? ProgressiveBackdropView)?.profile?.inputOutline?.contour {
+                    let actual = CGRect(x: panel.frame.minX + contour.bounds.minX,
+                        y: panel.frame.maxY - contour.bounds.maxY, width: contour.bounds.width, height: contour.bounds.height)
+                    print("AppKit target: \(converted.frame); hidden rendered bounds: \(actual); panel: \(panel.frame)")
+                }
+            }
+        }
         else { print("No usable focused input exposed. Around Input will use Bottom.") }
     }
 

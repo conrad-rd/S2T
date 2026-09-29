@@ -1,0 +1,21 @@
+# Appearance startup
+
+The user reported that the appearance still lagged behind activation and challenged the previous 18 ms claim. That number measured AppState recording startup with a simulated microphone and fake networking. It never measured when the appearance became visible. Do not use it as a key-to-screen timing.
+
+The saved appearance was Within Input. Its first complete color images, expansion field and native blur map were built after activation. The generated 1684-by-1084 and 1900-by-1800 fixtures measured 135.12 and 165.84 ms for that work and color composition. Repeated preparations of the same geometry took 2.29–6.99 ms. These measurements exclude Accessibility lookup and actual display presentation.
+
+Input appearances now prepare the full quiet glow while idle. App activation, native focused-element/window notifications and clicks schedule one debounced geometry read. The read uses the existing bounded metadata-only detector. It excludes Raycast, secure inputs and text contents. It does not read keystrokes or open the microphone. A focus event arriving during another read retains only the latest pending refresh, so a one-shot preparation is not dropped merely because the reader was busy.
+
+The input controller owns one renderer shared by the actual SwiftUI view. Preparation builds both color images and the native radius map in its hidden, nonactivating window. The frame survives the view's processing transition. Its timeline is paused while idle. Preparation waits for any previous fade-out to finish before changing hidden geometry. There is no temporary stroke or changed glow design.
+
+Activation still performs a fresh focus and geometry read before showing the appearance. It only displays a frame with matching geometry and dimensions. A field that changes immediately before activation can still need cold preparation; cached geometry never substitutes for current focus validation. This is an improvement to the prepared-input path, not a guarantee of zero delay for every newly focused or resized field.
+
+Run `build/S2T.app/Contents/MacOS/S2T --verify-appearance-startup`. The check renders the complete production color and native map, then prepares a hidden native input controller across repeated starts, width/height changes and a same-size corner change. It verifies that the actual hosting view shares the prepared renderer, the idle timeline is stopped, color is nonempty, the radius map exists, and activation preserves the completed images and window. No windows are presented and no screen pixels are captured.
+
+Prepared native-controller activation measured 0.01 ms in the four final fixtures because its images already existed. That number excludes the prior preparation, Accessibility validation and WindowServer presentation. It must not be presented as perceived latency. The cold renderer remains unchanged and still takes roughly 130–170 ms in these Within Input fixtures.
+
+The existing full-size sustained input workload completed 209 and 217 frames over four seconds, with maximum completion gaps of 24.68 and 23.80 ms. The growing composer workload completed 116 frames over four seconds, with an 80.07 ms maximum gap. These are generated frame completions, not displayed FPS.
+
+Logs are in `build/appearance-startup/`. The canonical app is `build/S2T.app`. No running S2T process was stopped or restarted. An invocation of the legacy `--verify-glow` command without its unused directory argument fell through into normal startup. The command now enters its isolated diagnostic with or without that argument. The inadvertently launched process was left running to avoid interrupting any dictation; only its waiting Python test runner was stopped.
+
+Final package: S2T 1.0.1, Build 693. All 400 service/domain tests passed. Packaged startup, input latency, input outline, input tracking, Within Input, simulated recording startup and build identity checks passed. The broader glow check passed generated rendering and hidden WindowServer checks on both displays, but exited at its final foreground-app equality assertion because focus changed during the run. Focus preservation is therefore inconclusive for that run. No real microphone, live provider or physical key-to-screen timing was tested.

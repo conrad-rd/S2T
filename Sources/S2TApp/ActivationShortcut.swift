@@ -6,11 +6,14 @@ import S2TCore
     @Published private(set) var available = false
     @Published private(set) var accessibilityGranted = false
     @Published private(set) var status = "Accessibility access is required."
-    @Published private(set) var isCapturing = false
-    @Published private(set) var isTesting = false
+    @Published private(set) var isCapturing = false { didSet { updateRouting() } }
+    @Published private(set) var isTesting = false { didSet { updateRouting() } }
     @Published private(set) var testStatus = "Test your shortcut without recording."
     @Published private(set) var testPassed = false
     var onAction: ((ActivationAction) -> Void)?
+    var onPromptPointer: ((CGEventType, CGEvent) -> Bool)?
+    var capturesPromptPointer = false { didSet { updateRouting() } }
+    var promptDragObserver: (@Sendable (CGPoint) -> Void)? { didSet { eventTap?.setDragObserver(promptDragObserver) } }
     var onPromptAction: ((ActivationAction) -> Void)?
     var onPromptCapture: ((ShortcutKey) -> Void)?
     private var capturingPrompt = false
@@ -19,16 +22,20 @@ import S2TCore
     private var promptTapEnabled = true
     private var activeKey: ShortcutKey?
     private var activePrompt = false
+    private var activePressStartedRecording = false
     var onCapture: ((ShortcutKey) -> Void)?
     var isListening: () -> Bool = { false }
     var canCancel: () -> Bool = { false }
     var onCancel: (() -> Void)?
-    private var escapeAwaitingRelease = false
+    private var escapeTimer: Timer?
+    private var escapeIsDown = false
+    private var escapeDidCancel = false
+    private static let escapeHoldDuration: TimeInterval = 0.6
     private var key = ShortcutKey.function
     private var holdEnabled = true
     private var tapEnabled = true
     private var tap: CFMachPort?
-    private var source: CFRunLoopSource?
+    private var eventTap: ShortcutEventTap?
     private var permissionTimer: Timer?
     private var requestedAccess = false
     private var localMonitor: Any?
@@ -39,9 +46,13 @@ import S2TCore
     private let systemAction = FnSystemAction()
     private var fnReady = true
     private let verification: Bool
+    private let escapeKeyIsDown: () -> Bool
     private static let modifierFlags: CGEventFlags = [.maskCommand, .maskControl, .maskAlternate, .maskShift, .maskSecondaryFn]
 
-    init(verification: Bool = false) { self.verification = verification }
+    init(verification: Bool = false, escapeKeyIsDown: (() -> Bool)? = nil) {
+        self.verification = verification
+        self.escapeKeyIsDown = escapeKeyIsDown ?? (verification ? { true } : { CGEventSource.keyState(.hidSystemState, key: 53) })
+    }
 
     func configure(key: ShortcutKey, hold: Bool, tap: Bool) {
         guard self.key != key || holdEnabled != hold || tapEnabled != tap else { return }
@@ -52,6 +63,7 @@ import S2TCore
         self.key = key
         holdEnabled = hold
         tapEnabled = tap
+        updateRouting()
         updateSystemAction()
         refresh()
     }
@@ -63,6 +75,7 @@ import S2TCore
         promptKey = key
         promptHoldEnabled = hold
         promptTapEnabled = tap
+        updateRouting()
         updateSystemAction()
         refresh()
     }
@@ -159,19 +172,18 @@ import S2TCore
         let mask = (CGEventMask(1) << CGEventType.flagsChanged.rawValue)
             | (CGEventMask(1) << CGEventType.keyDown.rawValue)
             | (CGEventMask(1) << CGEventType.keyUp.rawValue)
-        let pointer = Unmanaged.passUnretained(self).toOpaque()
-        guard let created = CGEvent.tapCreate(tap: .cgSessionEventTap, place: .headInsertEventTap, options: .defaultTap, eventsOfInterest: mask, callback: { _, type, event, pointer in
-            guard let pointer else { return Unmanaged.passUnretained(event) }
-            let controller = Unmanaged<ActivationShortcut>.fromOpaque(pointer).takeUnretainedValue()
-            let consume = MainActor.assumeIsolated { controller.receive(type: type, event: event) }
-            return consume ? nil : Unmanaged.passUnretained(event)
-        }, userInfo: pointer) else {
+            | (CGEventMask(1) << CGEventType.leftMouseDown.rawValue)
+            | (CGEventMask(1) << CGEventType.leftMouseDragged.rawValue)
+            | (CGEventMask(1) << CGEventType.leftMouseUp.rawValue)
+        let eventTap = ShortcutEventTap { [weak self] type, event in self?.receive(type: type, event: event) ?? false }
+        guard let created = eventTap.start(mask: mask) else {
             status = "macOS could not enable the shortcut. Check Accessibility access and reopen the app."
             return
         }
+        self.eventTap = eventTap
+        eventTap.setDragObserver(promptDragObserver)
+        updateRouting()
         tap = created
-        source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, created, 0)
-        CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
         CGEvent.tapEnable(tap: created, enable: true)
         updateSystemAction()
     }
@@ -194,22 +206,27 @@ import S2TCore
     }
 
     func receive(type: CGEventType, event: CGEvent) -> Bool {
+        defer { updateRouting() }
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
             resetGesture()
             if let tap { CGEvent.tapEnable(tap: tap, enable: true) }
             return false
         }
         if event.getIntegerValueField(.eventSourceUserData) == TextInsertion.eventMarker { return false }
+        if !isCapturing, !isTesting, onPromptPointer?(type, event) == true {
+            if event.getIntegerValueField(.keyboardEventKeycode) == 53, type == .keyDown || type == .keyUp {
+                _ = receiveEscape(type: type, event: event, allowModifiers: true)
+            }
+            if type == .leftMouseDown, activePrompt, !activePressStartedRecording { _ = gesture.interrupt() }
+            return true
+        }
+        if [.leftMouseDown, .leftMouseDragged, .leftMouseUp].contains(type) { return false }
         let eventTime = event.timestamp == 0 ? ProcessInfo.processInfo.systemUptime : Double(event.timestamp) / 1_000_000_000
         let code = UInt16(event.getIntegerValueField(.keyboardEventKeycode))
         let modifier = Self.primaryModifier(code)
         let modifierIsDown = Self.modifierIsDown(code, flags: event.flags)
         let down = type == .keyDown || (type == .flagsChanged && modifierIsDown == true)
         let up = type == .keyUp || (type == .flagsChanged && modifierIsDown == false)
-        if code == 53, escapeAwaitingRelease {
-            if up { escapeAwaitingRelease = false }
-            return true
-        }
         if isTesting {
             if code == 53 && down { cancelTest(); testStatus = "Shortcut test cancelled."; return true }
             if code == key.keyCode {
@@ -243,12 +260,10 @@ import S2TCore
             }
             return type == .keyDown || type == .keyUp
         }
-        if code == 53, type == .keyDown, canCancel() || keyIsDown {
-            escapeAwaitingRelease = true
-            _ = gesture.interrupt()
-            Task { @MainActor [weak self] in self?.onCancel?() }
-            return true
+        if code == 53, type == .keyDown || type == .keyUp {
+            return receiveEscape(type: type, event: event)
         }
+        if down { cancelEscapeHold() }
         if keyIsDown, let activeKey {
             if code == activeKey.keyCode {
                 if up {
@@ -275,7 +290,9 @@ import S2TCore
             activePrompt = binding.prompt
             activeKey = binding.key
             keyIsDown = true
-            dispatch(gesture.press(at: eventTime, listening: isListening(), hold: binding.hold, tap: binding.tap), prompt: binding.prompt)
+            let listening = isListening()
+            activePressStartedRecording = binding.hold && !listening
+            dispatch(gesture.press(at: eventTime, listening: listening, hold: binding.hold, tap: binding.tap), prompt: binding.prompt)
             return modifier == nil
         }
         return false
@@ -288,10 +305,58 @@ import S2TCore
         }
     }
 
+    private func receiveEscape(type: CGEventType, event: CGEvent, allowModifiers: Bool = false) -> Bool {
+        if type == .keyUp {
+            cancelEscapeHold()
+            return false
+        }
+        guard !escapeIsDown, event.getIntegerValueField(.keyboardEventAutorepeat) == 0 else { return escapeDidCancel }
+        escapeIsDown = true
+        var modifiers = event.flags.intersection(Self.modifierFlags)
+        if keyIsDown, let activeKey {
+            modifiers.subtract(CGEventFlags(rawValue: activeKey.modifiers))
+            if let modifier = Self.primaryModifier(activeKey.keyCode) { modifiers.remove(modifier) }
+        }
+        guard (allowModifiers || modifiers.isEmpty), canCancel() || keyIsDown else { return false }
+        let timer = Timer(timeInterval: Self.escapeHoldDuration, repeats: false) { [weak self] timer in
+            MainActor.assumeIsolated {
+                guard let self, self.escapeTimer === timer else { return }
+                self.escapeTimer = nil
+                guard self.escapeIsDown, self.canCancel() || self.keyIsDown else { return }
+                // A queued key-up must not become a hold when the main thread was busy.
+                guard self.escapeKeyIsDown() else { return }
+                self.escapeDidCancel = true
+                _ = self.gesture.interrupt()
+                self.onCancel?()
+            }
+        }
+        escapeTimer = timer
+        RunLoop.main.add(timer, forMode: .common)
+        return false
+    }
+
+    private func cancelEscapeHold() {
+        escapeTimer?.invalidate()
+        escapeTimer = nil
+        escapeIsDown = false
+        escapeDidCancel = false
+    }
+
     func resetGesture() {
+        cancelEscapeHold()
         keyIsDown = false
         activeKey = nil
+        updateRouting()
         dispatch(gesture.interrupt(), prompt: activePrompt)
+    }
+
+    private func updateRouting() {
+        var codes: Set<UInt16> = [key.keyCode, 53]
+        if let promptKey { codes.insert(promptKey.keyCode) }
+        if let capturedKeyAwaitingRelease { codes.insert(capturedKeyAwaitingRelease) }
+        eventTap?.configureRouting(keyCodes: isCapturing ? nil : codes,
+            observesOtherKeys: keyIsDown || escapeIsDown || isTesting,
+            commandClicks: capturesPromptPointer && !isCapturing && !isTesting)
     }
     func stop() {
         cancelTest()
@@ -303,10 +368,8 @@ import S2TCore
     private func removeTap() {
         cancelTest()
         testPassed = false
-        if let tap { CGEvent.tapEnable(tap: tap, enable: false) }
-        if let source { CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .commonModes) }
-        if let tap { CFMachPortInvalidate(tap) }
-        tap = nil; source = nil
+        eventTap?.stop()
+        eventTap = nil; tap = nil
         resetGesture()
         if !verification { systemAction.restore() }
         available = false

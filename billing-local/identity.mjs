@@ -16,6 +16,10 @@ export function createIdentity(config, keyResolver) {
       "Invalid account identity.",
       401,
     );
+    if (config.allowedEmail) requireThat(
+      typeof payload.email === "string" && payload.email.toLowerCase() === config.allowedEmail && payload.email_verified === true,
+      "account_access", "This account is not approved for S2T credits.", 403,
+    );
     return `${config.issuer}:${payload.sub}`;
   };
 }

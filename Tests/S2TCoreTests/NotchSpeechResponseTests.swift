@@ -61,4 +61,33 @@ final class NotchSpeechResponseTests: XCTestCase {
         XCTAssertGreaterThan(response.energy, 0)
         XCTAssertEqual(response.distortion, .identity)
     }
+
+    func testSpeechOnsetEasesInWithoutOvershoot() {
+        var response = NotchSpeechResponse()
+        response.update(level: 0.06, bands: [], time: 0, reducedMotion: false)
+        response.update(level: 0.06, bands: [], time: 1.0 / 60, reducedMotion: false)
+        var previous = response.energy
+        var steps: [Double] = []
+        for frame in 2...40 {
+            response.update(level: 0.6, bands: bass, time: Double(frame) / 60, reducedMotion: false)
+            XCTAssertGreaterThanOrEqual(response.energy, previous)
+            steps.append(response.energy - previous)
+            previous = response.energy
+        }
+        let target = pow((0.6 - 0.06) / 0.94, 0.7)
+        XCTAssertLessThanOrEqual(previous, target + 0.000001)
+        XCTAssertGreaterThan(previous, target * 0.95)
+        // Continuous velocity: the glow accelerates into a new level instead of jumping.
+        XCTAssertLessThan(steps[0], steps[1])
+        XCTAssertLessThan(steps[0], 0.08)
+    }
+
+    func testSpringStepIsExactAcrossFrameRates() {
+        var coarse = (0.0, 0.0)
+        coarse = NotchSpeechResponse.spring(value: coarse.0, velocity: coarse.1, target: 1, rate: 27, elapsed: 0.04)
+        var fine = (0.0, 0.0)
+        for _ in 0..<4 { fine = NotchSpeechResponse.spring(value: fine.0, velocity: fine.1, target: 1, rate: 27, elapsed: 0.01) }
+        XCTAssertEqual(coarse.0, fine.0, accuracy: 1e-12)
+        XCTAssertEqual(coarse.1, fine.1, accuracy: 1e-9)
+    }
 }

@@ -20,6 +20,7 @@ struct TopGlow: View {
     var timeOverride: Double? = nil
     var reduceTransparencyOverride: Bool? = nil
     @State private var history = GlowHistory(smoothAudio: true)
+    @State private var crossfade = GlowPhaseCrossfade()
     var reduceMotionOverride: Bool? = nil
     @Environment(\.displayScale) private var displayScale
     @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
@@ -33,18 +34,33 @@ struct TopGlow: View {
         TimelineView(.animation(minimumInterval: 1.0 / 60, paused: timeOverride != nil || !animationClock.running)) { timeline in
             let time = timeOverride ?? timeline.date.timeIntervalSinceReferenceDate
             let profile = profile(time: time)
+            let working = phase.processingAudio
+            let live = timeOverride == nil && renderedProfile == nil
+            let handoff = live ? crossfade.progress(working: working, completing: phase == .complete, time: time, reducedMotion: reduceMotion) : 1
+            let listeningRequest: ChromaFrameRequest? = {
+                guard live else { return nil }
+                guard !working else { return handoff < 1 ? crossfade.listeningRequest : nil }
+                let request = ChromaFrameRequest(geometry: .notch(layout), size: layout.frame.size,
+                    profile: profile, brightness: phase == .complete ? 0.3 : profile.speechGain,
+                    backdrop: showsBackdrop && !(reduceTransparencyOverride ?? reduceTransparency))
+                crossfade.listeningRequest = request
+                return request
+            }()
+            let loading = working || (handoff < 1 && crossfade.fromWorking)
             ZStack {
-                if !phase.busy && timeOverride == nil && renderedProfile == nil {
-                    PreparedChromaGlow(request: ChromaFrameRequest(geometry: .notch(layout), size: layout.frame.size,
-                        profile: profile, brightness: phase == .complete ? 0.3 : profile.speechGain,
-                        backdrop: showsBackdrop && !(reduceTransparencyOverride ?? reduceTransparency)), cycleTime: reduceMotion ? nil : time)
-                } else {
-                    if showsBackdrop && !(reduceTransparencyOverride ?? reduceTransparency) {
+                if let listeningRequest {
+                    PreparedChromaGlow(request: listeningRequest, cycleTime: reduceMotion ? nil : time,
+                        fade: GlowPhaseCrossfade.listeningOpacity(working: working, progress: handoff),
+                            backdropFade: working ? 0 : handoff)
+                }
+                if !live || loading {
+                    if showsBackdrop && !(reduceTransparencyOverride ?? reduceTransparency) && (handoff == 1 || working) {
                         GlowBackdrop(profile: profile)
                     }
-                    Canvas(colorMode: phase.busy ? .linear : .nonLinear) { context, size in
-                        draw(context: &context, size: size, profile: profile, time: time)
+                    Canvas(colorMode: loading ? .linear : .nonLinear) { context, size in
+                        draw(context: &context, size: size, profile: profile, time: time, loading: loading)
                     }
+                    .opacity(!live ? 1 : working ? handoff : 1 - handoff)
                 }
             }
         }
@@ -56,11 +72,11 @@ struct TopGlow: View {
     private func profile(time: Double) -> GlowProfile {
         if var renderedProfile {
             renderedProfile.response = response
-            renderedProfile.active = !phase.busy
+            renderedProfile.active = !phase.processingAudio
             renderedProfile.reducedMotion = reduceMotion
             return renderedProfile
         }
-        var profile = history.frame(level: phase.busy ? 0 : levelProvider(), time: time, reducedMotion: reduceMotion, bands: phase.busy ? [] : spectrumProvider?() ?? [], active: !phase.busy)
+        var profile = history.frame(level: phase.processingAudio ? 0 : levelProvider(), time: time, reducedMotion: reduceMotion, bands: phase.processingAudio ? [] : spectrumProvider?() ?? [], active: !phase.processingAudio)
         profile.sweepStrength = strength
         profile.response = response
         profile.topLayout = layout
@@ -98,7 +114,7 @@ struct TopGlow: View {
         }
     }
 
-    private func draw(context: inout GraphicsContext, size: CGSize, profile: GlowProfile, time: Double) {
+    private func draw(context: inout GraphicsContext, size: CGSize, profile: GlowProfile, time: Double, loading: Bool) {
         let edge = edgePath()
         var outside = edge
         outside.addLine(to: CGPoint(x: size.width, y: size.height))
@@ -106,15 +122,15 @@ struct TopGlow: View {
         outside.closeSubpath()
         context.clip(to: outside)
         let gradient = auraGradient(distortion: profile.distortion)
-        let brightness = phase.busy ? 0.75 : phase == .complete ? 0.3 : profile.speechGain
+        let brightness = loading ? 0.75 : phase == .complete ? 0.3 : profile.speechGain
         context.drawLayer { strip in
-            if phase.busy {
+            if loading {
                 ContourGlow.draw(context: &strip, path: edge, gradient: gradient,
                                  extent: 10, brightness: brightness, gentle: true)
             } else {
                 drawAura(context: &strip, edge: edge, size: size, profile: profile, brightness: brightness, time: time)
             }
-            if phase.busy {
+            if loading {
                 let progress = reduceMotion ? 0.5 : time.truncatingRemainder(dividingBy: 2.8) / 2.8
                 let center = progress * (size.width + 140) - 70
                 strip.stroke(edge, with: .linearGradient(Gradient(colors: [.clear, .white, .clear]),

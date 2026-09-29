@@ -9,7 +9,7 @@ import S2TCore
     private(set) var floatingIndicator: BezelIndicatorView?
     private(set) var isDragging = false
     private var overlay: BezelDragOverlay?
-    private var start: (point: NSPoint, side: BezelSide, position: Double)?
+    private var start: (point: NSPoint, side: BezelSide, position: Double, centerY: CGFloat)?
     private var center = NSPoint.zero
     private var velocity = CGVector.zero
     private var lastPoint = NSPoint.zero
@@ -33,11 +33,11 @@ import S2TCore
     required init?(coder: NSCoder) { nil }
 
     func synchronize(side: BezelSide, position: Double, phase: Int, time: Double, reducedMotion: Bool) {
-        self.reducedMotion = reducedMotion
         if start == nil && !settling {
             self.side = side
             self.position = position
             placeAttached()
+            self.reducedMotion = reducedMotion
         }
         let symbol: BezelSymbol = phase == 0 ? .checkmark : phase == 2 ? .spinner : .waveform
         let bands = (0..<7).map { 0.5 + 0.4 * sin(time * 2 + Double($0)) }
@@ -71,7 +71,7 @@ import S2TCore
     override func mouseDown(with event: NSEvent) {
         finishFloating()
         let point = convert(event.locationInWindow, from: nil)
-        start = (point, side, position)
+        start = (point, side, position, indicator.frame.midY)
         lastPoint = point
         lastEventTime = CACurrentMediaTime()
         window?.makeFirstResponder(self)
@@ -90,7 +90,8 @@ import S2TCore
                             dy: max(-1000, min(1000, (point.y - lastPoint.y) / elapsed)))
             lastEventTime = now
         }
-        position = min(1, max(0, start.position - (point.y - start.point.y) / max(1, bounds.height - 120)))
+        let centerY = start.centerY + point.y - start.point.y
+        position = min(1, max(0, (bounds.maxY - 60 - centerY) / max(1, bounds.height - 120)))
         center = NSPoint(x: min(bounds.width - 32, max(32, point.x)), y: bounds.height - 60 - position * max(1, bounds.height - 120))
         lastPoint = point
         updateBlob()
@@ -103,9 +104,10 @@ import S2TCore
             side = center.x < bounds.midX ? .left : .right
             start = nil
             isDragging = false
+            settling = true
             placeAttached()
-            onMove?(side, position)
             settleAtEdge()
+            onMove?(side, position)
         } else { start = nil }
     }
     override func keyDown(with event: NSEvent) {
@@ -129,7 +131,8 @@ import S2TCore
     }
     private func placeAttached() {
         indicator.side = side
-        indicator.setFrameOrigin(BezelGeometry.frame(screen: bounds, side: side, verticalPosition: position).origin)
+        indicator.setFrameOrigin(BezelGeometry.frame(screen: bounds, side: side,
+            verticalPosition: position).origin)
     }
     private func beginFloating() {
         guard let root = window?.contentView else { return }
@@ -162,11 +165,12 @@ import S2TCore
     private func updateBlob() {
         guard let floatingIndicator else { return }
         let age = max(0, CACurrentMediaTime() - lastEventTime)
-        let decay = exp(-age * 4.5)
+        let decay = exp(-age * (settling ? 14 : 4.5))
         let motion = reducedMotion ? CGVector.zero : CGVector(dx: velocity.dx * decay, dy: velocity.dy * decay)
-        let wobble = reducedMotion ? 0 : sin(age * 19) * decay * min(1, hypot(velocity.dx, velocity.dy) / 500)
+        let wobble = reducedMotion || settling ? 0 : sin(age * 19) * decay * min(1, hypot(velocity.dx, velocity.dy) / 500)
         let nearest: BezelSide = center.x < bounds.midX ? .left : .right
         let distance = nearest == .left ? center.x : bounds.width - center.x
+        floatingIndicator.dragVelocity = CGVector(dx: motion.dx, dy: -motion.dy)
         floatingIndicator.previewShape = BezelDragShape.make(velocity: motion, wobble: wobble, side: nearest, distance: distance)
     }
     static func blob(velocity: CGVector) -> BezelShape { BezelDragShape.make(velocity: velocity) }
@@ -181,21 +185,22 @@ import S2TCore
         guard let floatingIndicator else { return }
         if isDragging { updateBlob(); return }
         guard let release else { return }
-        let progress = min(1, (CACurrentMediaTime() - release.time) / 0.48)
+        let progress = min(1, (CACurrentMediaTime() - release.time) / 0.36)
         let target = indicator.convert(indicator.displayedShape.symbolCenter, to: self)
-        let travel = 1 - pow(1 - min(1, progress / 0.75), 3)
+        let travel = 1 - pow(1 - progress, 3)
         center = CGPoint(x: release.center.x + (target.x - release.center.x) * travel,
                          y: release.center.y + (target.y - release.center.y) * travel)
         positionFloating(at: center)
         updateBlob()
-        // Keep the liquid neck pinned to the edge while it settles into the real contour.
-        if progress > 0.55, let source = floatingIndicator.previewShape {
+        if let source = floatingIndicator.previewShape {
             let targetShape = indicator.displayedShape
             let origin = indicator.convert(NSPoint.zero, to: floatingIndicator)
             var transform = CGAffineTransform(translationX: origin.x, y: origin.y)
-            let shape = BezelShape(path: targetShape.path.copy(using: &transform)!, symbolCenter: BezelDragShape.center)
-            let t = (progress - 0.55) / 0.45
-            floatingIndicator.previewShape = BezelDragShape.morph(source, into: shape, amount: t * t * (3 - 2 * t))
+            let shape = BezelShape(path: targetShape.path.copy(using: &transform)!, symbolCenter: targetShape.symbolCenter.applying(transform))
+            let distance = side == .left ? center.x : bounds.width - center.x
+            let targetDistance = side == .left ? target.x : bounds.width - target.x
+            let t = min(1, max(0, (94 - distance) / max(1, 94 - targetDistance)))
+            floatingIndicator.previewShape = BezelDragShape.morph(source, into: shape, amount: travel * t * t * (3 - 2 * t))
         }
         if progress >= 1 { finishFloating() }
     }

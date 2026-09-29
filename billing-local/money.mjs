@@ -1,4 +1,4 @@
-export const MICRO_USD_PER_CREDIT = 9000;
+export const MICRO_USD_PER_CREDIT = 5000;
 export class Fault extends Error {
   constructor(code, message, status = 409) {
     super(message);
@@ -18,17 +18,19 @@ export function integer(value, min, max, label) {
   return value;
 }
 export function dollarsToMicros(value) {
+  requireThat(typeof value === "number" || typeof value === "string", "invalid_cost", "Provider returned an invalid cost.");
   const text = String(value);
-  requireThat(
-    /^(0|[1-9]\d*)(\.\d{1,12})?$/.test(text),
-    "invalid_cost",
-    "Provider returned an invalid cost.",
-  );
-  const [whole, fraction = ""] = text.split(".");
-  const micros =
-    BigInt(whole) * 1000000n +
-    BigInt((fraction + "000000").slice(0, 6)) +
-    (/[^0]/.test(fraction.slice(6)) ? 1n : 0n);
+  const match = text.length <= 128 && /^(0|[1-9]\d*)(?:\.(\d+))?(?:[eE]([+-]?\d{1,3}))?$/.exec(text);
+  requireThat(match, "invalid_cost", "Provider returned an invalid cost.");
+  const exponent = Number(match[3] || 0);
+  requireThat(Math.abs(exponent) <= 400, "invalid_cost", "Provider cost exponent exceeds supported range.");
+  const fraction = match[2] || "";
+  const coefficient = BigInt(match[1] + fraction);
+  const scale = 6 + exponent - fraction.length;
+  const divisor = scale < 0 ? 10n ** BigInt(-scale) : 1n;
+  const micros = scale >= 0
+    ? coefficient * 10n ** BigInt(scale)
+    : (coefficient + divisor - 1n) / divisor;
   requireThat(micros <= 1000000000000n, "invalid_cost", "Provider cost exceeds supported range.");
   return Number(micros);
 }

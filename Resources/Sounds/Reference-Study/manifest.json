@@ -1,0 +1,86 @@
+[
+  {
+    "family": "flow",
+    "event": "start",
+    "variant": 1,
+    "label": "Start 1",
+    "file": "flow-start-01.mp3"
+  },
+  {
+    "family": "flow",
+    "event": "start",
+    "variant": 2,
+    "label": "Start 2",
+    "file": "flow-start-02.mp3"
+  },
+  {
+    "family": "flow",
+    "event": "processing",
+    "variant": 1,
+    "label": "Processing 1",
+    "file": "flow-processing-01.mp3"
+  },
+  {
+    "family": "flow",
+    "event": "processing",
+    "variant": 2,
+    "label": "Processing 2",
+    "file": "flow-processing-02.mp3"
+  },
+  {
+    "family": "flow",
+    "event": "finish",
+    "variant": 1,
+    "label": "Finish 1",
+    "file": "flow-finish-01.mp3"
+  },
+  {
+    "family": "flow",
+    "event": "finish",
+    "variant": 2,
+    "label": "Finish 2",
+    "file": "flow-finish-02.mp3"
+  },
+  {
+    "family": "discord",
+    "event": "start",
+    "variant": 1,
+    "label": "Start 1",
+    "file": "discord-start-01.mp3"
+  },
+  {
+    "family": "discord",
+    "event": "start",
+    "variant": 2,
+    "label": "Start 2",
+    "file": "discord-start-02.mp3"
+  },
+  {
+    "family": "discord",
+    "event": "processing",
+    "variant": 1,
+    "label": "Processing 1",
+    "file": "discord-processing-01.mp3"
+  },
+  {
+    "family": "discord",
+    "event": "processing",
+    "variant": 2,
+    "label": "Processing 2",
+    "file": "discord-processing-02.mp3"
+  },
+  {
+    "family": "discord",
+    "event": "finish",
+    "variant": 1,
+    "label": "Finish 1",
+    "file": "discord-finish-01.mp3"
+  },
+  {
+    "family": "discord",
+    "event": "finish",
+    "variant": 2,
+    "label": "Finish 2",
+    "file": "discord-finish-02.mp3"
+  }
+]
